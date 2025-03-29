@@ -52,7 +52,6 @@ public class LocalDatabase: DatabaseTarget {
         CREATE TABLE IF NOT EXISTS record(
             id TEXT PRIMARY KEY,
             objectName TEXT,
-            createdAt TEXT,
             data TEXT
         );
         """
@@ -71,15 +70,14 @@ public class LocalDatabase: DatabaseTarget {
     @discardableResult
     public func write<T: Storable>(_ record: Record<T>) -> Bool {
         return self.databaseQueue.sync {
-            let statementString = "REPLACE INTO record (id, objectName, createdAt, data) VALUES (?, ?, ?, ?);"
+            let statementString = "REPLACE INTO record (id, objectName, data) VALUES (?, ?, ?);"
             var statement: OpaquePointer? = nil
             guard sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
                 return false
             }
             sqlite3_bind_text(statement, 1, (record.metadata.id as NSString).utf8String, -1, nil)
             sqlite3_bind_text(statement, 2, (record.metadata.objectName as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(statement, 3, (self.dateFormatter.string(from: record.metadata.createdAt) as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(statement, 4, (String(decoding: record.data.toDataObject().rawData, as: UTF8.self) as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statement, 3, (String(decoding: record.data.toDataObject().rawData, as: UTF8.self) as NSString).utf8String, -1, nil)
             let outcome = sqlite3_step(statement) == SQLITE_DONE
             if self.transactionActive {
                 sqlite3_reset(statement)
@@ -104,10 +102,6 @@ public class LocalDatabase: DatabaseTarget {
                 if sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK {
                     sqlite3_bind_text(statement, 1, (objectName as NSString).utf8String, -1, nil)
                     while sqlite3_step(statement) == SQLITE_ROW {
-                        // These may come in handy later:
-                        //let id = String(describing: String(cString: sqlite3_column_text(statement, 0)))
-                        //let objectName = String(describing: String(cString: sqlite3_column_text(statement, 1)))
-                        //let createdAt = self.dateFormatter.date(from: String(describing: String(cString: sqlite3_column_text(statement, 2)))) ?? Date()
                         let dataString = String(describing: String(cString: sqlite3_column_text(statement, 3)))
                         guard let data = dataString.data(using: .utf8) else {
                             continue
