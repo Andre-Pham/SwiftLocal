@@ -1,5 +1,5 @@
 //
-//  SerializationDatabase.swift
+//  LocalDatabase.swift
 //  SwiftLocal
 //
 //  Created by Andre Pham on 5/1/2023.
@@ -9,7 +9,7 @@ import Foundation
 import SQLite3
 
 /// A database target that uses the SQLite3 to save data.
-public class SerializationDatabase: DatabaseTarget {
+public class LocalDatabase: DatabaseTarget {
     
     /// The directory the sqlite file is saved to
     private let url: URL

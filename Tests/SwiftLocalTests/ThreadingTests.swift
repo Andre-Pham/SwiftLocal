@@ -12,7 +12,7 @@ final class ThreadingTests: XCTestCase {
 
     static let THREAD_COUNT = 5
     static let TIMEOUT = 120
-    let databaseTargets: [DatabaseTarget] = [SerializationDatabase()]
+    let databaseTargets: [DatabaseTarget] = [LocalDatabase()]
     var smallStudent: Student {
         let student = Student(firstName: "Big", lastName: "Boy", debt: 0.0, teacher: self.teacher, subjectNames: ["Math"])
         for _ in 0..<8000 {

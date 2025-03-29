@@ -10,7 +10,7 @@ import XCTest
 
 final class LegacyTests: XCTestCase {
     
-    let databaseTargets: [DatabaseTarget] = [SerializationDatabase()]
+    let databaseTargets: [DatabaseTarget] = [LocalDatabase()]
     
     override func setUp() async throws {
         self.databaseTargets.forEach({ _ = $0.clearDatabase() })
