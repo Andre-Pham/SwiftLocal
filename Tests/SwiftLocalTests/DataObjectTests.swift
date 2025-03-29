@@ -54,7 +54,7 @@ final class DataObjectTests: XCTestCase {
         }
     }
     
-    func testRawSeralization() throws {
+    func testRawSerialization() throws {
         for database in self.databaseTargets {
             print("-- DATABASE \(database.self) --")
             
