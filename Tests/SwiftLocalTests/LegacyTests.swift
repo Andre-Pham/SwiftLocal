@@ -10,23 +10,23 @@ import XCTest
 
 final class LegacyTests: XCTestCase {
     
-    let localDatabase = LocalDatabase()
+    let localDatabase = try! LocalDatabase()
     
     override func setUp() async throws {
-        self.localDatabase.clearDatabase()
+        try await self.localDatabase.clearDatabase()
     }
     
-    override func tearDown() {
-        self.localDatabase.clearDatabase()
+    override func tearDown() async throws {
+        try await self.localDatabase.clearDatabase()
     }
-
-    func testFieldAndClassNameRefactor() throws {
+    
+    func testFieldAndClassNameRefactor() async throws {
         // First remember to declare the refactor
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
         
         let legacyHomework = LegacyHomework(legacyAnswers: "1 + 1 = 2", legacyGrade: 100)
-        XCTAssert(self.localDatabase.write(Record(data: legacyHomework)))
-        let allHomework: [Homework] = self.localDatabase.read()
+        try await self.localDatabase.write(Record(data: legacyHomework))
+        let allHomework: [Homework] = try await self.localDatabase.read()
         if allHomework.count == 1 {
             let homework = allHomework[0]
             XCTAssertEqual(homework.answers, legacyHomework.legacyAnswers)
@@ -36,35 +36,38 @@ final class LegacyTests: XCTestCase {
         }
     }
     
-    func testLegacyReadIDs() throws {
+    func testLegacyReadIDs() async throws {
         // First remember to declare the refactor
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
         
         let legacyHomework = LegacyHomework(legacyAnswers: "1 + 1 = 2", legacyGrade: 100)
-        XCTAssert(self.localDatabase.write(Record(id: "myHomework", data: legacyHomework)))
-        let homeworkCount = self.localDatabase.readIDs(Homework.self)
-        XCTAssertEqual(homeworkCount, ["myHomework"])
+        try await self.localDatabase.write(Record(id: "myHomework", data: legacyHomework))
+        let homeworkIDs = try await self.localDatabase.readIDs(Homework.self)
+        XCTAssertEqual(homeworkIDs, ["myHomework"])
     }
     
-    func testLegacyCount() throws {
+    func testLegacyCount() async throws {
         // First remember to declare the refactor
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
         
         let legacyHomework = LegacyHomework(legacyAnswers: "1 + 1 = 2", legacyGrade: 100)
-        XCTAssert(self.localDatabase.write(Record(data: legacyHomework)))
-        let homeworkCount = self.localDatabase.count(Homework.self)
+        try await self.localDatabase.write(Record(data: legacyHomework))
+        let homeworkCount = try await self.localDatabase.count(Homework.self)
         XCTAssertEqual(homeworkCount, 1)
     }
     
-    func testLegacyDelete() throws {
+    func testLegacyDelete() async throws {
         // First remember to declare the refactor
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
         
         let legacyHomework = LegacyHomework(legacyAnswers: "1 + 1 = 2", legacyGrade: 100)
-        XCTAssert(self.localDatabase.count() == 0)
-        XCTAssert(self.localDatabase.write(Record(data: legacyHomework)))
-        XCTAssert(self.localDatabase.delete(Homework.self) == 1)
-        XCTAssert(self.localDatabase.count() == 0)
+        let countBefore = try await self.localDatabase.count()
+        XCTAssertEqual(countBefore, 0)
+        try await self.localDatabase.write(Record(data: legacyHomework))
+        let deletedCount = try await self.localDatabase.delete(Homework.self)
+        XCTAssertEqual(deletedCount, 1)
+        let countAfter = try await self.localDatabase.count()
+        XCTAssertEqual(countAfter, 0)
     }
 
 }

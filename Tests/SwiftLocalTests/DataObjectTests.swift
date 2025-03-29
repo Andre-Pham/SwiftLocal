@@ -10,7 +10,7 @@ import XCTest
 
 final class DataObjectTests: XCTestCase {
     
-    let localDatabase = LocalDatabase()
+    let localDatabase = try! LocalDatabase()
 
     let student = Student(
         firstName: "Billy",
@@ -21,18 +21,18 @@ final class DataObjectTests: XCTestCase {
     )
     
     override func setUp() async throws {
-        self.localDatabase.clearDatabase()
+        try await self.localDatabase.clearDatabase()
         self.student.giveHomework(Homework(answers: "2x + 5", grade: nil))
         self.student.giveHomework(Homework(answers: "Something smart", grade: 99))
     }
     
-    override func tearDown() {
-        self.localDatabase.clearDatabase()
+    override func tearDown() async throws {
+        try await self.localDatabase.clearDatabase()
     }
     
-    func testSerialization() throws {
-        XCTAssertTrue(self.localDatabase.write(Record(id: "student", data: self.student)))
-        let readStudent: Student? = self.localDatabase.read(id: "student")
+    func testSerialization() async throws {
+        try await self.localDatabase.write(Record(id: "student", data: self.student))
+        let readStudent: Student? = try await self.localDatabase.read(id: "student")
         XCTAssertNotNil(readStudent)
         
         // Make sure all data is correctly saved and restored

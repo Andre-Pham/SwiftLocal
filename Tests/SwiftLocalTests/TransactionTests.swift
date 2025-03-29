@@ -10,7 +10,7 @@ import XCTest
 
 final class TransactionTests: XCTestCase {
 
-    let localDatabase = LocalDatabase()
+    let localDatabase = try! LocalDatabase()
     var student1: Student {
         Student(firstName: "Billy", lastName: "Bob", debt: 100_000.0, teacher: self.teacher, subjectNames: ["Physics", "English"])
     }
@@ -22,108 +22,158 @@ final class TransactionTests: XCTestCase {
     }
     
     override func setUp() async throws {
-        self.localDatabase.clearDatabase()
+        try await self.localDatabase.clearDatabase()
     }
     
-    override func tearDown() {
-        self.localDatabase.clearDatabase()
+    override func tearDown() async throws {
+        try await self.localDatabase.clearDatabase()
     }
     
-    func testCommitTransaction() throws {
+    func testCommitTransaction() async throws {
         let record = Record(data: self.student1)
-        XCTAssert(self.localDatabase.count() == 0)
-        XCTAssert(self.localDatabase.startTransaction(override: true))
-        XCTAssert(self.localDatabase.write(record))
+        var count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 0)
+        // Start transaction
+        try await self.localDatabase.startTransaction(override: true)
+        try await self.localDatabase.write(record)
         // If we write during a transaction we expect the changes to have been applied
-        XCTAssert(self.localDatabase.count() == 1)
-        XCTAssert(self.localDatabase.commitTransaction())
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
+        // Commit the transaction
+        try await self.localDatabase.commitTransaction()
         // After committing we expect the changes to have been applied
-        XCTAssert(self.localDatabase.count() == 1)
-        // If we've committed we expect a rollback to fail (return false)
-        XCTAssertFalse(self.localDatabase.rollbackTransaction())
-        // After rolling back a non-existent transaction we expect our record to still be there
-        XCTAssert(self.localDatabase.count() == 1)
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
+        // If we've committed, there is no active transaction, so attempting a rollback should throw
+        do {
+            try await self.localDatabase.rollbackTransaction()
+            XCTFail("Expected rollbackTransaction() to throw when no active transaction exists")
+        } catch {
+            // Happy path - catch expected error
+        }
+        // After trying to rollback a non-existent transaction, we expect our record to still be there
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
     }
     
-    func testRollbackTransaction() throws {
+    func testRollbackTransaction() async throws {
         let record = Record(data: self.student1)
-        XCTAssert(self.localDatabase.count() == 0)
-        XCTAssert(self.localDatabase.startTransaction(override: true))
-        XCTAssert(self.localDatabase.write(record))
-        XCTAssert(self.localDatabase.count() == 1)
-        XCTAssert(self.localDatabase.rollbackTransaction())
+        var count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 0)
+        // Start transaction
+        try await self.localDatabase.startTransaction(override: true)
+        try await self.localDatabase.write(record)
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
+        // Rollback transaction
+        try await self.localDatabase.rollbackTransaction()
         // After rolling back we expect our record that was previously there to have been removed
-        XCTAssert(self.localDatabase.count() == 0)
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 0)
     }
     
-    func testCommitThenRollback() throws {
+    func testCommitThenRollback() async throws {
         let record0 = Record(data: self.teacher)
         let record1 = Record(data: self.student1)
         let record2 = Record(data: self.student2)
         // First we write one record (no transaction necessary)
-        XCTAssert(self.localDatabase.write(record0))
-        XCTAssert(self.localDatabase.count() == 1)
+        try await self.localDatabase.write(record0)
+        var count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
         // Then we write one record using a transaction, and commit
-        XCTAssert(self.localDatabase.startTransaction(override: true))
-        XCTAssert(self.localDatabase.write(record1))
-        XCTAssert(self.localDatabase.commitTransaction())
-        XCTAssert(self.localDatabase.count() == 2)
+        try await self.localDatabase.startTransaction(override: true)
+        try await self.localDatabase.write(record1)
+        try await self.localDatabase.commitTransaction()
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 2)
         // Then we write one record using a transaction, then rollback
-        XCTAssert(self.localDatabase.startTransaction(override: true))
-        XCTAssert(self.localDatabase.write(record2))
-        XCTAssert(self.localDatabase.count() == 3)
-        XCTAssert(self.localDatabase.rollbackTransaction())
+        try await self.localDatabase.startTransaction(override: true)
+        try await self.localDatabase.write(record2)
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 3)
+        try await self.localDatabase.rollbackTransaction()
         // After rolling back, we expect our previous state of two records
-        XCTAssert(self.localDatabase.count() == 2)
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 2)
     }
     
-    func testTransactionOverride() throws {
+    func testTransactionOverride() async throws {
         let record = Record(data: self.student1)
-        XCTAssert(self.localDatabase.startTransaction(override: true))
-        XCTAssert(self.localDatabase.write(record))
-        XCTAssert(self.localDatabase.count() == 1)
-        XCTAssert(self.localDatabase.startTransaction(override: true))
+        try await self.localDatabase.startTransaction(override: true)
+        try await self.localDatabase.write(record)
+        var count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
         // After we start a transaction during another transaction with override true
         // we expect the previous transaction's writes to be undone
-        XCTAssert(self.localDatabase.count() == 0)
-        XCTAssert(self.localDatabase.commitTransaction())
+        try await self.localDatabase.startTransaction(override: true)
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 0)
+        try await self.localDatabase.commitTransaction()
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 0)
     }
     
-    func testTransactionNoOverride() throws {
+    func testTransactionNoOverride() async throws {
         let record = Record(data: self.student1)
-        XCTAssert(self.localDatabase.startTransaction(override: true))
-        XCTAssert(self.localDatabase.write(record))
-        XCTAssert(self.localDatabase.count() == 1)
-        XCTAssertFalse(self.localDatabase.startTransaction(override: false))
-        // After we start a transaction during another transaction with override false
-        // we expect the previous transaction's writes to persist
-        XCTAssert(self.localDatabase.count() == 1)
-        XCTAssert(self.localDatabase.rollbackTransaction())
-        // But after rolling back, we still expect the previous transaction's writes to be undone
-        XCTAssert(self.localDatabase.count() == 0)
+        try await self.localDatabase.startTransaction(override: true)
+        try await self.localDatabase.write(record)
+        var count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
+        // After we attempt to start a transaction during another transaction with override false
+        // we expect an error to be thrown
+        do {
+            try await self.localDatabase.startTransaction(override: false)
+            XCTFail("Expected startTransaction(override: false) to throw when a transaction is already active")
+        } catch {
+            // Happy path - catch expected error
+        }
+        // We expect the initial transaction's writes to persist
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
+        // After rolling back, we expect the previous transaction's writes to be undone
+        try await self.localDatabase.rollbackTransaction()
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 0)
     }
     
-    func testTransactionManyCommit() throws {
+    func testTransactionManyCommit() async throws {
         let record = Record(data: self.student1)
-        XCTAssert(self.localDatabase.startTransaction(override: true))
-        XCTAssert(self.localDatabase.write(record))
-        XCTAssert(self.localDatabase.count() == 1)
-        XCTAssert(self.localDatabase.commitTransaction())
-        // If we commit a second time, we expect it to fail (return false) and the previous state to persist
-        XCTAssertFalse(self.localDatabase.commitTransaction())
-        XCTAssert(self.localDatabase.count() == 1)
+        try await self.localDatabase.startTransaction(override: true)
+        try await self.localDatabase.write(record)
+        var count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
+        try await self.localDatabase.commitTransaction()
+        // If we commit a second time, we expect it to throw because there is no active transaction
+        do {
+            try await self.localDatabase.commitTransaction()
+            XCTFail("Expected commitTransaction() to throw when no active transaction exists")
+        } catch {
+            // Happy path - catch expected error
+        }
+        // We expect the initial transaction's writes to persist
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
     }
     
-    func testTransactionManyRollback() throws {
+    func testTransactionManyRollback() async throws {
         let record = Record(data: self.student1)
-        XCTAssert(self.localDatabase.startTransaction(override: true))
-        XCTAssert(self.localDatabase.write(record))
-        XCTAssert(self.localDatabase.count() == 1)
-        XCTAssert(self.localDatabase.rollbackTransaction())
-        XCTAssert(self.localDatabase.count() == 0)
-        // If we rollback a second time, we expect it to fail (return false) and the previous state to persist
-        XCTAssertFalse(self.localDatabase.rollbackTransaction())
-        XCTAssert(self.localDatabase.count() == 0)
+        try await self.localDatabase.startTransaction(override: true)
+        try await self.localDatabase.write(record)
+        var count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
+        try await self.localDatabase.rollbackTransaction()
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 0)
+        // If we rollback a second time, we expect it to throw because there is no active transaction
+        do {
+            try await self.localDatabase.rollbackTransaction()
+            XCTFail("Expected rollbackTransaction() to throw when no active transaction exists")
+        } catch {
+            // Happy path - catch expected error
+        }
+        // We expect the initial state to persist
+        count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 0)
     }
 
 }

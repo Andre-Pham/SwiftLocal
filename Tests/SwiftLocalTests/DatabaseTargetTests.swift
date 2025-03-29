@@ -10,7 +10,7 @@ import XCTest
 
 final class DatabaseTargetTests: XCTestCase {
 
-    let localDatabase = LocalDatabase()
+    let localDatabase = try! LocalDatabase()
     var student1: Student {
         Student(firstName: "Billy", lastName: "Bob", debt: 100_000.0, teacher: self.teacher, subjectNames: ["Physics", "English"])
     }
@@ -22,98 +22,109 @@ final class DatabaseTargetTests: XCTestCase {
     }
     
     override func setUp() async throws {
-        self.localDatabase.clearDatabase()
+        try await self.localDatabase.clearDatabase()
     }
     
-    override func tearDown() {
-        self.localDatabase.clearDatabase()
+    override func tearDown() async throws {
+        try await self.localDatabase.clearDatabase()
     }
 
-    func testWrite() throws {
+    func testWrite() async throws {
         let record = Record(data: self.student1)
-        XCTAssert(self.localDatabase.write(record))
-        XCTAssert(self.localDatabase.count() == 1)
+        try await self.localDatabase.write(record)
+        let count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
     }
     
-    func testReadByObjectType() throws {
-        XCTAssert(self.localDatabase.write(Record(data: self.student1)))
-        XCTAssert(self.localDatabase.write(Record(data: self.student2)))
-        let readStudents: [Student] = self.localDatabase.read()
+    func testReadByObjectType() async throws {
+        try await self.localDatabase.write(Record(data: self.student1))
+        try await self.localDatabase.write(Record(data: self.student2))
+        let readStudents: [Student] = try await self.localDatabase.read()
         XCTAssertEqual(readStudents.count, 2)
-        XCTAssert(readStudents.contains(where: { $0.firstName == self.student1.firstName }))
-        XCTAssert(readStudents.contains(where: { $0.firstName == self.student2.firstName }))
-        XCTAssert(self.localDatabase.count() == 2)
+        XCTAssertTrue(readStudents.contains { $0.firstName == student1.firstName })
+        XCTAssertTrue(readStudents.contains { $0.firstName == student2.firstName })
+        let count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 2)
     }
     
-    func testReadByID() throws {
+    func testReadByID() async throws {
         let record = Record(id: "testID", data: self.student1)
-        XCTAssert(self.localDatabase.write(record))
-        let readStudent: Student? = self.localDatabase.read(id: "testID")
+        try await self.localDatabase.write(record)
+        let readStudent: Student? = try await self.localDatabase.read(id: "testID")
         XCTAssertNotNil(readStudent)
-        XCTAssert(self.localDatabase.count() == 1)
+        let count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
     }
     
-    func testReadIDs() throws {
-        XCTAssert(self.localDatabase.write(Record(id: "testID1", data: self.student1)))
-        XCTAssert(self.localDatabase.write(Record(id: "testID2", data: self.student2)))
-        XCTAssert(self.localDatabase.write(Record(id: "testID3", data: self.teacher)))
-        let studentIDs = self.localDatabase.readIDs(Student.self)
-        let teacherIDs = self.localDatabase.readIDs(Teacher.self)
-        XCTAssert(studentIDs.contains("testID1"))
-        XCTAssert(studentIDs.contains("testID2"))
-        XCTAssert(studentIDs.count == 2)
-        XCTAssert(teacherIDs.contains("testID3"))
-        XCTAssert(teacherIDs.count == 1)
+    func testReadIDs() async throws {
+        try await self.localDatabase.write(Record(id: "testID1", data: self.student1))
+        try await self.localDatabase.write(Record(id: "testID2", data: self.student2))
+        try await self.localDatabase.write(Record(id: "testID3", data: self.teacher))
+        let studentIDs = try await self.localDatabase.readIDs(Student.self)
+        let teacherIDs = try await self.localDatabase.readIDs(Teacher.self)
+        XCTAssertTrue(studentIDs.contains("testID1"))
+        XCTAssertTrue(studentIDs.contains("testID2"))
+        XCTAssertEqual(studentIDs.count, 2)
+        XCTAssertTrue(teacherIDs.contains("testID3"))
+        XCTAssertEqual(teacherIDs.count, 1)
     }
     
-    func testDeleteByObjectType() throws {
-        XCTAssert(self.localDatabase.write(Record(data: self.student1)))
-        XCTAssert(self.localDatabase.write(Record(data: self.student2)))
-        XCTAssert(self.localDatabase.write(Record(data: self.teacher)))
-        let countDeleted = self.localDatabase.delete(Student.self)
+    func testDeleteByObjectType() async throws {
+        try await self.localDatabase.write(Record(data: self.student1))
+        try await self.localDatabase.write(Record(data: self.student2))
+        try await self.localDatabase.write(Record(data: self.teacher))
+        let countDeleted = try await self.localDatabase.delete(Student.self)
         XCTAssertEqual(countDeleted, 2)
-        let readStudents: [Student] = self.localDatabase.read()
+        let readStudents: [Student] = try await self.localDatabase.read()
         XCTAssertEqual(readStudents.count, 0)
-        let readTeachers: [Teacher] = self.localDatabase.read()
+        let readTeachers: [Teacher] = try await self.localDatabase.read()
         XCTAssertEqual(readTeachers.count, 1)
-        XCTAssert(self.localDatabase.count() == 1)
+        let count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
     }
     
-    func testDeleteByID() throws {
-        XCTAssert(self.localDatabase.write(Record(id: "student1", data: self.student1)))
-        XCTAssert(self.localDatabase.write(Record(id: "student2", data: self.student2)))
-        XCTAssert(self.localDatabase.delete(id: "student1"))
-        let readStudent1: Student? = self.localDatabase.read(id: "student1")
-        let readStudent2: Student? = self.localDatabase.read(id: "student2")
+    func testDeleteByID() async throws {
+        try await self.localDatabase.write(Record(id: "student1", data: self.student1))
+        try await self.localDatabase.write(Record(id: "student2", data: self.student2))
+        try await self.localDatabase.delete(id: "student1")
+        let readStudent1: Student? = try await self.localDatabase.read(id: "student1")
+        let readStudent2: Student? = try await self.localDatabase.read(id: "student2")
         XCTAssertNil(readStudent1)
         XCTAssertNotNil(readStudent2)
-        XCTAssert(self.localDatabase.count() == 1)
+        let count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
     }
     
-    func testClearDatabase() throws {
-        XCTAssert(self.localDatabase.write(Record(id: "student1", data: self.student1)))
-        XCTAssert(self.localDatabase.write(Record(id: "student2", data: self.student2)))
-        XCTAssertEqual(self.localDatabase.clearDatabase(), 2)
-        let readStudents: [Student] = self.localDatabase.read()
+    func testClearDatabase() async throws {
+        try await self.localDatabase.write(Record(id: "student1", data: self.student1))
+        try await self.localDatabase.write(Record(id: "student2", data: self.student2))
+        let countDeleted = try await self.localDatabase.clearDatabase()
+        XCTAssertEqual(countDeleted, 2)
+        let readStudents: [Student] = try await self.localDatabase.read()
         XCTAssertEqual(readStudents.count, 0)
-        XCTAssert(self.localDatabase.count() == 0)
+        let count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 0)
     }
     
-    func testReplace() throws {
-        XCTAssert(self.localDatabase.write(Record(id: "student", data: self.student1)))
-        XCTAssert(self.localDatabase.write(Record(id: "student", data: self.student2)))
-        let readStudent: Student? = self.localDatabase.read(id: "student")
-        XCTAssertEqual(readStudent?.firstName, self.student2.firstName)
-        XCTAssert(self.localDatabase.count() == 1)
+    func testReplace() async throws {
+        try await self.localDatabase.write(Record(id: "student", data: self.student1))
+        try await self.localDatabase.write(Record(id: "student", data: self.student2))
+        let readStudent: Student? = try await self.localDatabase.read(id: "student")
+        XCTAssertEqual(readStudent?.firstName, student2.firstName)
+        let count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
     }
     
-    func testCount() throws {
-        XCTAssert(self.localDatabase.write(Record(data: self.student1)))
-        XCTAssert(self.localDatabase.write(Record(data: self.student2)))
-        XCTAssert(self.localDatabase.write(Record(data: self.teacher)))
-        XCTAssert(self.localDatabase.count() == 3)
-        XCTAssert(self.localDatabase.count(Student.self) == 2)
-        XCTAssert(self.localDatabase.count(Teacher.self) == 1)
+    func testCount() async throws {
+        try await self.localDatabase.write(Record(data: self.student1))
+        try await self.localDatabase.write(Record(data: self.student2))
+        try await self.localDatabase.write(Record(data: self.teacher))
+        let countAll = try await self.localDatabase.count()
+        XCTAssertEqual(countAll, 3)
+        let studentCount = try await self.localDatabase.count(Student.self)
+        XCTAssertEqual(studentCount, 2)
+        let teacherCount = try await self.localDatabase.count(Teacher.self)
+        XCTAssertEqual(teacherCount, 1)
     }
 
 }

@@ -8,6 +8,19 @@
 import Foundation
 import SQLite3
 
+public enum LocalDatabaseError: Error {
+    
+    /// An error relating to opening the database
+    case databaseOpenError(String)
+    /// An error relating to preparing an SQLite3 statement
+    case statementPreparationError(String)
+    /// An error relating to an SQLite3 statement execution failing
+    case executionError(String)
+    /// An error relating to a transaction
+    case transactionError(String)
+    
+}
+
 /// A database target that uses the SQLite3 to save data.
 public class LocalDatabase {
     
@@ -25,20 +38,17 @@ public class LocalDatabase {
     }
     /// True if a transaction is ongoing
     public private(set) var transactionActive = false
-    /// The queue of tasks for the database to complete - allows database to be accessed by multiple concurrent threads
-    /// It ensures every database access is serialized so only one operation can access the database at a time
-    /// Otherwise database access from multiple concurrent threads can cause the error "illegal multi-threaded access to database connection"
-    /// Tip: To ensure no deadlocks, make sure a task added to the queue doesn't start another task
-    /// Tip: If accessing the database is required before starting another operation, both database accesses should be completed within a single sync block, otherwise they can become out of sync (this is accomplished using "internal" denoted methods that execute without being queued so they can be called within sync blocks)
+    /// A dedicated serial queue to serialize all SQLite access - allows database to be accessed by multiple concurrent threads
     private let databaseQueue = DispatchQueue(label: "swiftlocal.andrepham")
     
-    public init() {
-        self.url = FileManager.default.urls(for: .libraryDirectory, in: .allDomainsMask)[0]
+    public init() throws {
+        self.url = FileManager.default
+            .urls(for: .libraryDirectory, in: .allDomainsMask)[0]
             .appendingPathComponent("records.sqlite")
         guard sqlite3_open(self.url.path, &self.database) == SQLITE_OK else {
-            fatalError("SQLite database could not be opened")
+            throw LocalDatabaseError.databaseOpenError("SQLite database could not be opened at path: \(self.url.path)")
         }
-        self.setupTable()
+        try self.setupTable()
     }
     
     deinit {
@@ -47,7 +57,7 @@ public class LocalDatabase {
         }
     }
     
-    private func setupTable() {
+    private func setupTable() throws {
         let statementString = """
         CREATE TABLE IF NOT EXISTS record(
             id TEXT PRIMARY KEY,
@@ -56,59 +66,80 @@ public class LocalDatabase {
         );
         """
         var statement: OpaquePointer? = nil
-        if sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK {
-            let outcome = sqlite3_step(statement) == SQLITE_DONE
-            assert(outcome, "SQLite table could not be created")
+        guard sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
+            throw LocalDatabaseError.statementPreparationError("Failed to prepare table creation statement")
+        }
+        guard sqlite3_step(statement) == SQLITE_DONE else {
             sqlite3_finalize(statement)
+            throw LocalDatabaseError.executionError("Failed to create table")
+        }
+        sqlite3_finalize(statement)
+    }
+    
+    /// A centralized helper that runs work on the dedicated database queue.
+    private func perform<T>(_ block: @escaping () throws -> T) async throws -> T {
+        return try await withCheckedThrowingContinuation { continuation in
+            self.databaseQueue.async {
+                do {
+                    let result = try block()
+                    continuation.resume(returning: result)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
         }
     }
     
     /// Write a record to the database. If the id already exists, replace it.
     /// - Parameters:
     ///   - record: The record to be written
-    /// - Returns: If the write was successful
-    @discardableResult
-    public func write<T: Storable>(_ record: Record<T>) -> Bool {
-        return self.databaseQueue.sync {
+    public func write<T: Storable>(_ record: Record<T>) async throws {
+        try await self.perform {
             let statementString = "REPLACE INTO record (id, objectName, data) VALUES (?, ?, ?);"
             var statement: OpaquePointer? = nil
             guard sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
-                return false
+                throw LocalDatabaseError.statementPreparationError("Failed to prepare write statement")
             }
             sqlite3_bind_text(statement, 1, (record.metadata.id as NSString).utf8String, -1, nil)
             sqlite3_bind_text(statement, 2, (record.metadata.objectName as NSString).utf8String, -1, nil)
             sqlite3_bind_text(statement, 3, (String(decoding: record.data.toDataObject().rawData, as: UTF8.self) as NSString).utf8String, -1, nil)
-            let outcome = sqlite3_step(statement) == SQLITE_DONE
+            let successful = sqlite3_step(statement) == SQLITE_DONE
             if self.transactionActive {
                 sqlite3_reset(statement)
             } else {
                 sqlite3_finalize(statement)
             }
-            return outcome
+            if !successful {
+                throw LocalDatabaseError.executionError("Failed to write record for object: \(record.metadata.objectName)")
+            }
         }
     }
     
     /// Retrieve all storable objects of a specified type.
     /// - Returns: All saved objects of the specified type
-    public func read<T: Storable>() -> [T] {
-        return self.databaseQueue.sync {
+    public func read<T: Storable>() async throws -> [T] {
+        return try await self.perform {
             let currentObjectName = String(describing: T.self)
-            let legacyObjectNames = Legacy.oldClassNames[currentObjectName]
-            let allObjectNames = (legacyObjectNames ?? [String]()) + [currentObjectName]
+            let legacyObjectNames = Legacy.oldClassNames[currentObjectName] ?? []
+            let allObjectNames = legacyObjectNames + [currentObjectName]
             var result = [T]()
             for objectName in allObjectNames {
                 let statementString = "SELECT * FROM record WHERE objectName = ?;"
                 var statement: OpaquePointer? = nil
-                if sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK {
-                    sqlite3_bind_text(statement, 1, (objectName as NSString).utf8String, -1, nil)
-                    while sqlite3_step(statement) == SQLITE_ROW {
-                        let dataString = String(describing: String(cString: sqlite3_column_text(statement, 3)))
-                        guard let data = dataString.data(using: .utf8) else {
-                            continue
-                        }
-                        let dataObject = DataObject(data: data)
-                        result.append(dataObject.restore(T.self))
+                guard sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
+                    throw LocalDatabaseError.statementPreparationError("Failed to prepare read statement for object: \(objectName)")
+                }
+                sqlite3_bind_text(statement, 1, (objectName as NSString).utf8String, -1, nil)
+                while sqlite3_step(statement) == SQLITE_ROW {
+                    guard let dataCStr = sqlite3_column_text(statement, 3) else {
+                        continue
                     }
+                    let dataString = String(cString: dataCStr)
+                    guard let data = dataString.data(using: .utf8) else {
+                        continue
+                    }
+                    let dataObject = DataObject(data: data)
+                    result.append(dataObject.restore(T.self))
                 }
                 sqlite3_finalize(statement)
             }
@@ -120,19 +151,24 @@ public class LocalDatabase {
     /// - Parameters:
     ///   - id: The id of the stored record
     /// - Returns: The storable object with the matching id
-    public func read<T: Storable>(id: String) -> T? {
-        return self.databaseQueue.sync {
+    public func read<T: Storable>(id: String) async throws -> T? {
+        return try await self.perform {
             let statementString = "SELECT * FROM record WHERE id = ?;"
             var statement: OpaquePointer? = nil
+            guard sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
+                throw LocalDatabaseError.statementPreparationError("Failed to prepare read statement for id: \(id)")
+            }
+            sqlite3_bind_text(statement, 1, (id as NSString).utf8String, -1, nil)
             var result: T? = nil
-            if sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK {
-                sqlite3_bind_text(statement, 1, (id as NSString).utf8String, -1, nil)
-                if sqlite3_step(statement) == SQLITE_ROW {
-                    let dataString = String(describing: String(cString: sqlite3_column_text(statement, 3)))
-                    if let data = dataString.data(using: .utf8) {
-                        let dataObject = DataObject(data: data)
-                        result = dataObject.restore(T.self)
-                    }
+            if sqlite3_step(statement) == SQLITE_ROW {
+                guard let dataCStr = sqlite3_column_text(statement, 3) else {
+                    sqlite3_finalize(statement)
+                    return nil
+                }
+                let dataString = String(cString: dataCStr)
+                if let data = dataString.data(using: .utf8) {
+                    let dataObject = DataObject(data: data)
+                    result = dataObject.restore(T.self)
                 }
             }
             sqlite3_finalize(statement)
@@ -144,19 +180,22 @@ public class LocalDatabase {
     /// - Parameters:
     ///   - allOf: The type to retrieve the ids from
     /// - Returns: All stored record ids of the provided type
-    public func readIDs<T: Storable>(_ allOf: T.Type) -> [String] {
-        return self.databaseQueue.sync {
+    public func readIDs<T: Storable>(_ allOf: T.Type) async throws -> [String] {
+        return try await self.perform {
             let currentObjectName = String(describing: T.self)
-            let legacyObjectNames = Legacy.oldClassNames[currentObjectName]
-            let allObjectNames = (legacyObjectNames ?? [String]()) + [currentObjectName]
+            let legacyObjectNames = Legacy.oldClassNames[currentObjectName] ?? []
+            let allObjectNames = legacyObjectNames + [currentObjectName]
             var result = [String]()
             for objectName in allObjectNames {
                 let statementString = "SELECT id FROM record WHERE objectName = ?;"
                 var statement: OpaquePointer? = nil
-                if sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK {
-                    sqlite3_bind_text(statement, 1, (objectName as NSString).utf8String, -1, nil)
-                    while sqlite3_step(statement) == SQLITE_ROW {
-                        let id = String(describing: String(cString: sqlite3_column_text(statement, 0)))
+                guard sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
+                    throw LocalDatabaseError.statementPreparationError("Failed to prepare readIDs statement for object: \(objectName)")
+                }
+                sqlite3_bind_text(statement, 1, (objectName as NSString).utf8String, -1, nil)
+                while sqlite3_step(statement) == SQLITE_ROW {
+                    if let idCStr = sqlite3_column_text(statement, 0) {
+                        let id = String(cString: idCStr)
                         result.append(id)
                     }
                 }
@@ -171,19 +210,20 @@ public class LocalDatabase {
     ///   - allOf: The type to delete
     /// - Returns: The number of records deleted
     @discardableResult
-    public func delete<T: Storable>(_ allOf: T.Type) -> Int {
-        return self.databaseQueue.sync {
+    public func delete<T: Storable>(_ allOf: T.Type) async throws -> Int {
+        return try await self.perform {
             let countBeforeDelete = self.countInternal()
             let currentObjectName = String(describing: T.self)
-            let legacyObjectNames = Legacy.oldClassNames[currentObjectName]
-            let allObjectNames = (legacyObjectNames ?? [String]()) + [currentObjectName]
+            let legacyObjectNames = Legacy.oldClassNames[currentObjectName] ?? []
+            let allObjectNames = legacyObjectNames + [currentObjectName]
             for objectName in allObjectNames {
                 let statementString = "DELETE FROM record WHERE objectName = ?;"
                 var statement: OpaquePointer? = nil
-                if sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK {
-                    sqlite3_bind_text(statement, 1, (objectName as NSString).utf8String, -1, nil)
-                    sqlite3_step(statement)
+                guard sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
+                    throw LocalDatabaseError.statementPreparationError("Failed to prepare delete statement for object: \(objectName)")
                 }
+                sqlite3_bind_text(statement, 1, (objectName as NSString).utf8String, -1, nil)
+                sqlite3_step(statement)
                 if self.transactionActive {
                     sqlite3_reset(statement)
                 } else {
@@ -197,45 +237,50 @@ public class LocalDatabase {
     /// Delete the record with the matching id.
     /// - Parameters:
     ///   - id: The id of the stored record to delete
-    /// - Returns: If any record was successfully deleted
-    @discardableResult
-    public func delete(id: String) -> Bool {
-        return self.databaseQueue.sync {
-            var successful = false
+    public func delete(id: String) async throws {
+        try await self.perform {
             let statementString = "DELETE FROM record WHERE id = ?;"
             var statement: OpaquePointer? = nil
-            if sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK {
-                sqlite3_bind_text(statement, 1, (id as NSString).utf8String, -1, nil)
-                successful = sqlite3_step(statement) == SQLITE_DONE
+            guard sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
+                throw LocalDatabaseError.statementPreparationError("Failed to prepare delete statement for id: \(id)")
             }
+            sqlite3_bind_text(statement, 1, (id as NSString).utf8String, -1, nil)
+            let successful = sqlite3_step(statement) == SQLITE_DONE
             if self.transactionActive {
                 sqlite3_reset(statement)
             } else {
                 sqlite3_finalize(statement)
             }
-            return successful
+            if !successful {
+                throw LocalDatabaseError.executionError("Failed to delete record with id: \(id)")
+            }
         }
     }
     
     /// Clear the entire database.
     /// - Returns: The number of records deleted
     @discardableResult
-    public func clearDatabase() -> Int {
-        return self.databaseQueue.sync {
+    public func clearDatabase() async throws -> Int {
+        return try await self.perform {
             let count = self.countInternal()
             var countDeleted = 0
             let statementString = "DELETE FROM record;"
             var statement: OpaquePointer? = nil
-            if sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK {
-                if sqlite3_step(statement) == SQLITE_DONE {
-                    // Only if successful can we can assign the previous count (before clearing the database) to our return value
-                    countDeleted = count
-                }
+            guard sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
+                throw LocalDatabaseError.statementPreparationError("Failed to prepare clearDatabase statement")
+            }
+            let successful = sqlite3_step(statement) == SQLITE_DONE
+            if successful {
+                // Only if successful can we can assign the previous count (before clearing the database) to our return value
+                countDeleted = count
             }
             if self.transactionActive {
                 sqlite3_reset(statement)
             } else {
                 sqlite3_finalize(statement)
+            }
+            if !successful {
+                throw LocalDatabaseError.executionError("Failed to clear database")
             }
             return countDeleted
         }
@@ -243,9 +288,9 @@ public class LocalDatabase {
     
     /// Count the number of records saved.
     /// - Returns: The number of records
-    public func count() -> Int {
-        return self.databaseQueue.sync {
-            return self.countInternal()
+    public func count() async throws -> Int {
+        return try await self.perform {
+            self.countInternal()
         }
     }
     
@@ -271,22 +316,24 @@ public class LocalDatabase {
     /// - Parameters:
     ///   - allOf: The type to count
     /// - Returns: The number of records of the provided type currently saved
-    public func count<T: Storable>(_ allOf: T.Type) -> Int {
-        return self.databaseQueue.sync {
+    public func count<T: Storable>(_ allOf: T.Type) async throws -> Int {
+        return try await self.perform {
             var count = 0
             let currentObjectName = String(describing: T.self)
-            let legacyObjectNames = Legacy.oldClassNames[currentObjectName]
-            let allObjectNames = (legacyObjectNames ?? [String]()) + [currentObjectName]
+            let legacyObjectNames = Legacy.oldClassNames[currentObjectName] ?? []
+            let allObjectNames = legacyObjectNames + [currentObjectName]
             for objectName in allObjectNames {
                 let statementString = "SELECT COUNT(*) FROM record WHERE objectName = ?;"
                 var statement: OpaquePointer? = nil
-                if sqlite3_prepare(self.database, statementString, -1, &statement, nil) == SQLITE_OK {
-                    sqlite3_bind_text(statement, 1, (objectName as NSString).utf8String, -1, nil)
-                    if sqlite3_step(statement) == SQLITE_ROW {
-                        count += Int(sqlite3_column_int(statement, 0))
-                    } else {
-                        assertionFailure("Counting records statement could not be executed")
-                    }
+                guard sqlite3_prepare(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
+                    throw LocalDatabaseError.statementPreparationError("Failed to prepare count statement for object: \(objectName)")
+                }
+                sqlite3_bind_text(statement, 1, (objectName as NSString).utf8String, -1, nil)
+                if sqlite3_step(statement) == SQLITE_ROW {
+                    count += Int(sqlite3_column_int(statement, 0))
+                } else {
+                    sqlite3_finalize(statement)
+                    throw LocalDatabaseError.executionError("Counting records statement could not be executed for object: \(objectName)")
                 }
                 sqlite3_finalize(statement)
             }
@@ -300,55 +347,57 @@ public class LocalDatabase {
     /// If a new transaction is started before this one is committed, this transaction's changes are rolled back.
     /// - Parameters:
     ///   - override: Override (roll back) the current transaction if one is currently active already - true by default
-    /// - Returns: True if the transaction was successfully started
-    public func startTransaction(override: Bool = true) -> Bool {
-        return self.databaseQueue.sync {
+    public func startTransaction(override: Bool = true) async throws {
+        try await self.perform {
             if self.transactionActive {
                 if !override {
-                    // There already exists a transaction, and we can't override it!
-                    return false
+                    throw LocalDatabaseError.transactionError("Transaction already active and override is false")
                 }
-                let rollbackSuccessful = self.rollbackTransactionInternal()
-                if !rollbackSuccessful {
-                    return false
+                if !self.rollbackTransactionInternal() {
+                    throw LocalDatabaseError.transactionError("Failed to rollback active transaction")
                 }
             }
-            var result = false
             let beginTransactionString = "BEGIN TRANSACTION;"
             var statement: OpaquePointer? = nil
-            if sqlite3_prepare_v2(self.database, beginTransactionString, -1, &statement, nil) == SQLITE_OK {
-                result = sqlite3_step(statement) == SQLITE_DONE
-                sqlite3_finalize(statement)
+            guard sqlite3_prepare_v2(self.database, beginTransactionString, -1, &statement, nil) == SQLITE_OK else {
+                throw LocalDatabaseError.statementPreparationError("Failed to prepare startTransaction statement")
             }
-            self.transactionActive = result
-            return result
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                sqlite3_finalize(statement)
+                throw LocalDatabaseError.executionError("Failed to start transaction")
+            }
+            sqlite3_finalize(statement)
+            self.transactionActive = true
         }
     }
     
     /// Commit the current transaction. All changes made during the transaction are finalised.
-    /// - Returns: True if there was an active transaction and it was committed
-    public func commitTransaction() -> Bool {
-        return self.databaseQueue.sync {
+    public func commitTransaction() async throws {
+        try await self.perform {
             guard self.transactionActive else {
-                return false
+                throw LocalDatabaseError.transactionError("No active transaction to commit")
             }
-            var result = false
             let commitTransactionString = "COMMIT;"
             var statement: OpaquePointer? = nil
-            if sqlite3_prepare_v2(self.database, commitTransactionString, -1, &statement, nil) == SQLITE_OK {
-                result = sqlite3_step(statement) == SQLITE_DONE
-                sqlite3_finalize(statement)
+            guard sqlite3_prepare_v2(self.database, commitTransactionString, -1, &statement, nil) == SQLITE_OK else {
+                throw LocalDatabaseError.statementPreparationError("Failed to prepare commitTransaction statement")
             }
-            self.transactionActive = self.transactionActive ? !result : false
-            return result
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                sqlite3_finalize(statement)
+                throw LocalDatabaseError.executionError("Failed to commit transaction")
+            }
+            sqlite3_finalize(statement)
+            self.transactionActive = false
         }
     }
     
     /// Rollback the current transaction. All changes made during the transaction are undone.
     /// - Returns: True if there was an active transaction and it was rolled back
-    public func rollbackTransaction() -> Bool {
-        return self.databaseQueue.sync {
-            return self.rollbackTransactionInternal()
+    public func rollbackTransaction() async throws {
+        try await self.perform {
+            if !self.rollbackTransactionInternal() {
+                throw LocalDatabaseError.transactionError("No active transaction to rollback or rollback failed")
+            }
         }
     }
     
@@ -359,15 +408,15 @@ public class LocalDatabase {
         guard self.transactionActive else {
             return false
         }
-        var result = false
         let rollbackTransactionString = "ROLLBACK;"
         var statement: OpaquePointer? = nil
+        var successful = false
         if sqlite3_prepare_v2(self.database, rollbackTransactionString, -1, &statement, nil) == SQLITE_OK {
-            result = sqlite3_step(statement) == SQLITE_DONE
+            successful = sqlite3_step(statement) == SQLITE_DONE
             sqlite3_finalize(statement)
         }
-        self.transactionActive = self.transactionActive ? !result : false
-        return result
+        self.transactionActive = successful ? false : self.transactionActive
+        return successful
     }
     
 }

@@ -12,7 +12,7 @@ final class ThreadingTests: XCTestCase {
 
     static let THREAD_COUNT = 5
     static let TIMEOUT = 120
-    let localDatabase = LocalDatabase()
+    let localDatabase = try! LocalDatabase()
     var smallStudent: Student {
         let student = Student(firstName: "Big", lastName: "Boy", debt: 0.0, teacher: self.teacher, subjectNames: ["Math"])
         for _ in 0..<8000 {
@@ -39,171 +39,171 @@ final class ThreadingTests: XCTestCase {
     }
     
     override func setUp() async throws {
-        self.localDatabase.clearDatabase()
+        try await self.localDatabase.clearDatabase()
     }
     
-    override func tearDown() {
-        self.localDatabase.clearDatabase()
+    override func tearDown() async throws {
+        try await self.localDatabase.clearDatabase()
     }
-
-    func testMultipleWriteThreads() throws {
+    
+    func testMultipleWriteThreads() async throws {
         print("============================== WRITE THREADS ======================")
-        // Setup expectations - XCTest doesn't wait for asynchronous code to complete unless explicitly instructed to do so
         let expectedCount = Self.THREAD_COUNT
-        let expectation = XCTestExpectation(description: "Complete all threads")
-        expectation.expectedFulfillmentCount = expectedCount
-        // Setup records
-        var studentRecords = [Record<Student>]()
-        for _ in 0..<expectedCount {
-            studentRecords.append(Record(data: self.largeStudent))
-        }
-        // Test case
-        for (index, record) in studentRecords.enumerated() {
-            DispatchQueue.global().async {
-                print("> Writing on thread \(index + 1)")
-                XCTAssert(self.localDatabase.write(record))
-                expectation.fulfill()
+        // Use a task group to perform concurrent writes
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<expectedCount {
+                group.addTask { [weak self] in
+                    guard let self = self else { return }
+                    let record = Record(data: self.largeStudent)
+                    do {
+                        print("> Writing on thread \(index + 1)")
+                        try await self.localDatabase.write(record)
+                    } catch {
+                        XCTFail("Write failed on thread \(index + 1): \(error)")
+                    }
+                }
             }
+            // Wait for all tasks to finish
+            await group.waitForAll()
         }
-        wait(for: [expectation], timeout: TimeInterval(Self.TIMEOUT))
-        // Make sure all records were written
         print("> Counting on main thread")
-        XCTAssert(self.localDatabase.count() == expectedCount)
+        let count = try await self.localDatabase.count()
+        XCTAssertEqual(count, expectedCount)
         print("============================== END WRITE THREADS ==================")
     }
     
-    func testMultipleReadThreads() throws {
+    func testMultipleReadThreads() async throws {
         print("============================== READ THREADS =======================")
-        // Setup expectations - XCTest doesn't wait for asynchronous code to complete unless explicitly instructed to do so
         let expectedCount = Self.THREAD_COUNT
-        let expectation = XCTestExpectation(description: "Complete all threads")
-        expectation.expectedFulfillmentCount = expectedCount
-        // Setup records
-        var studentRecords = [Record<Student>]()
-        for _ in 0..<expectedCount {
-            studentRecords.append(Record(data: self.smallStudent))
-        }
-        // Test case
-        for (index, record) in studentRecords.enumerated() {
-            DispatchQueue.global().async {
-                print("> Writing on thread \(index + 1)")
-                XCTAssert(self.localDatabase.write(record))
-                print("> Reading many on thread \(index + 1)")
-                let read: [Student] = self.localDatabase.read()
-                XCTAssertFalse(read.isEmpty)
-                print("> Reading IDs on thread \(index + 1)")
-                XCTAssertFalse(self.localDatabase.readIDs(Student.self).isEmpty)
-                print("> Reading one on thread \(index + 1)")
-                let student: Student? = self.localDatabase.read(id: record.metadata.id)
-                XCTAssertNotNil(student)
-                expectation.fulfill()
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<expectedCount {
+                group.addTask { [weak self] in
+                    guard let self = self else { return }
+                    print("> Writing on thread \(index + 1)")
+                    let record = Record(data: self.smallStudent)
+                    do {
+                        print("> Writing on thread \(index + 1)")
+                        try await self.localDatabase.write(record)
+                        print("> Reading many on thread \(index + 1)")
+                        let read: [Student] = try await self.localDatabase.read()
+                        XCTAssertFalse(read.isEmpty)
+                        print("> Reading IDs on thread \(index + 1)")
+                        let ids = try await self.localDatabase.readIDs(Student.self)
+                        XCTAssertFalse(ids.isEmpty)
+                        print("> Reading one on thread \(index + 1)")
+                        let student: Student? = try await self.localDatabase.read(id: record.metadata.id)
+                        XCTAssertNotNil(student)
+                    } catch {
+                        XCTFail("Read thread \(index + 1) failed: \(error)")
+                    }
+                }
             }
+            await group.waitForAll()
         }
-        wait(for: [expectation], timeout: TimeInterval(Self.TIMEOUT))
         print("============================== END READ THREADS ===================")
     }
     
-    func testMultipleDeleteThreads() throws {
+    func testMultipleDeleteThreads() async throws {
         print("============================== DELETE THREADS =====================")
-        // Setup expectations - XCTest doesn't wait for asynchronous code to complete unless explicitly instructed to do so
         let expectedCount = Self.THREAD_COUNT
-        let expectation1 = XCTestExpectation(description: "Complete all threads")
-        expectation1.expectedFulfillmentCount = expectedCount
-        let expectation2 = XCTestExpectation(description: "Complete all threads")
-        expectation2.expectedFulfillmentCount = expectedCount
-        // Setup records
-        var studentRecords = [Record<Student>]()
-        for _ in 0..<expectedCount {
-            studentRecords.append(Record(data: self.largeStudent))
-        }
-        // Test case 1
-        for (index, record) in studentRecords.enumerated() {
-            DispatchQueue.global().async {
-                print("> Writing on thread \(index + 1)")
-                XCTAssert(self.localDatabase.write(record))
-                print("> Deleting one on thread \(index + 1)")
-                XCTAssert(self.localDatabase.delete(id: record.metadata.id))
-                expectation1.fulfill()
+        // Test case 1: Write and then delete each record by its id
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<expectedCount {
+                group.addTask { [weak self] in
+                    guard let self = self else { return }
+                    let record = Record(data: self.largeStudent)
+                    do {
+                        print("> Writing on thread \(index + 1)")
+                        try await self.localDatabase.write(record)
+                        print("> Deleting one on thread \(index + 1)")
+                        try await self.localDatabase.delete(id: record.metadata.id)
+                    } catch {
+                        XCTFail("Delete by id failed on thread \(index + 1): \(error)")
+                    }
+                }
             }
+            await group.waitForAll()
         }
-        wait(for: [expectation1], timeout: TimeInterval(Self.TIMEOUT))
-        // Test case 2
-        for index in 0..<Self.THREAD_COUNT {
-            DispatchQueue.global().async {
-                print("> Deleting many on thread \(index + 1)")
-                let _ = self.localDatabase.delete(Student.self)
-                print("> Deleting all on thread \(index + 1)")
-                let _ = self.localDatabase.clearDatabase()
-                expectation2.fulfill()
+        // Test case 2: Bulk delete tasks (delete by object type and clear database)
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<expectedCount {
+                group.addTask { [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        print("> Deleting many on thread \(index + 1)")
+                        _ = try await self.localDatabase.delete(Student.self)
+                        print("> Deleting all on thread \(index + 1)")
+                        _ = try await self.localDatabase.clearDatabase()
+                    } catch {
+                        XCTFail("Bulk delete failed on thread \(index + 1): \(error)")
+                    }
+                }
             }
+            await group.waitForAll()
         }
-        wait(for: [expectation2], timeout: TimeInterval(Self.TIMEOUT))
         print("============================== END DELETE THREADS =================")
     }
     
-    func testMultipleCountThreads() throws {
+    func testMultipleCountThreads() async throws {
         print("============================== COUNT THREADS ======================")
-        // Setup expectations - XCTest doesn't wait for asynchronous code to complete unless explicitly instructed to do so
         let expectedCount = Self.THREAD_COUNT
-        let expectation = XCTestExpectation(description: "Complete all threads")
-        expectation.expectedFulfillmentCount = expectedCount
-        // Setup records
-        var studentRecords = [Record<Student>]()
-        for _ in 0..<expectedCount {
-            studentRecords.append(Record(data: self.largeStudent))
-        }
-        // Test case
-        for (index, record) in studentRecords.enumerated() {
-            DispatchQueue.global().async {
-                print("> Writing on thread \(index + 1)")
-                XCTAssert(self.localDatabase.write(record))
-                print("> Counting all on thread \(index + 1)")
-                XCTAssert(self.localDatabase.count() > 0)
-                print("> Counting on thread \(index + 1)")
-                XCTAssert(self.localDatabase.count(Student.self) > 0)
-                expectation.fulfill()
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<expectedCount {
+                group.addTask { [weak self] in
+                    guard let self = self else { return }
+                    let record = Record(data: self.largeStudent)
+                    do {
+                        print("> Writing on thread \(index + 1)")
+                        try await self.localDatabase.write(record)
+                        print("> Counting all on thread \(index + 1)")
+                        let totalCount = try await self.localDatabase.count()
+                        XCTAssertTrue(totalCount > 0)
+                        print("> Counting on thread \(index + 1)")
+                        let countForStudent = try await self.localDatabase.count(Student.self)
+                        XCTAssertTrue(countForStudent > 0)
+                    } catch {
+                        XCTFail("Count failed on thread \(index + 1): \(error)")
+                    }
+                }
             }
+            await group.waitForAll()
         }
-        wait(for: [expectation], timeout: TimeInterval(Self.TIMEOUT))
         print("============================== END COUNT THREADS ==================")
     }
     
-    func testMultipleTransactionThreads() throws {
+    func testMultipleTransactionThreads() async throws {
         print("============================== TRANSACTION THREADS ================")
-        // Setup expectations - XCTest doesn't wait for asynchronous code to complete unless explicitly instructed to do so
         let expectedCount = Self.THREAD_COUNT
-        let expectation = XCTestExpectation(description: "Complete all threads")
-        expectation.expectedFulfillmentCount = expectedCount
-        // Setup records
-        var studentRecords = [Record<Student>]()
-        for _ in 0..<expectedCount {
-            studentRecords.append(Record(data: self.largeStudent))
-        }
-        // Test case
-        for (index, record) in studentRecords.enumerated() {
-            DispatchQueue.global().async {
-                // Depending on threads, there isn't always a transaction to override (and hence rollback) / commit / rollback
-                // We execute a these operations to ensure thread access is safe and valid (otherwise an error is thrown)
-                // As to the actual order - this wouldn't be proper code in an application
-                // Applications are expected to manage transaction operation order - you shouldn't be starting multiple concurrent transactions simultaneously
-                // (That defeats the purpose of being able to access the database from anywhere, and not having to complete a transaction within a block)
-                print("> Starting transaction on thread \(index + 1)")
-                let _ = self.localDatabase.startTransaction(override: true)
-                print("> Writing on thread \(index + 1)")
-                XCTAssert(self.localDatabase.write(record))
-                print("> Completing transaction on thread \(index + 1)")
-                let _ = self.localDatabase.commitTransaction()
-                print("> Starting transaction on thread \(index + 1)")
-                let _ = self.localDatabase.startTransaction(override: true)
-                print("> Writing on thread \(index + 1)")
-                XCTAssert(self.localDatabase.write(record))
-                print("> Rolling back transaction on thread \(index + 1)")
-                let _ = self.localDatabase.rollbackTransaction()
-                expectation.fulfill()
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<expectedCount {
+                group.addTask { [weak self] in
+                    guard let self = self else { return }
+                    let record = Record(data: self.largeStudent)
+                    do {
+                        // Depending on threads, there isn't always a transaction to override (and hence rollback) / commit / rollback
+                        // We execute these operations to ensure thread access is safe and valid (otherwise an error is thrown)
+                        // As to the actual order - this wouldn't be proper code in an application
+                        // Applications are expected to manage transaction operation order - you shouldn't be starting multiple concurrent transactions simultaneously
+                        print("> Starting transaction on thread \(index + 1)")
+                        try await self.localDatabase.startTransaction(override: true)
+                        print("> Writing on thread \(index + 1)")
+                        try await self.localDatabase.write(record)
+                        print("> Committing transaction on thread \(index + 1)")
+                        try await self.localDatabase.commitTransaction()
+                        print("> Starting second transaction on thread \(index + 1)")
+                        try await self.localDatabase.startTransaction(override: true)
+                        print("> Writing on thread \(index + 1)")
+                        try await self.localDatabase.write(record)
+                        print("> Rolling back transaction on thread \(index + 1)")
+                        try await self.localDatabase.rollbackTransaction()
+                    } catch {
+                        XCTFail("Transaction failed on thread \(index + 1): \(error)")
+                    }
+                }
             }
+            await group.waitForAll()
         }
-        wait(for: [expectation], timeout: TimeInterval(Self.TIMEOUT))
-        print("============================== END TRANSACTION THREADS ============")
+        print("============================== END TRANSACTION THREADS =================")
     }
 
 }
