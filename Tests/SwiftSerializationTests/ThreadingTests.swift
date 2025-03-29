@@ -1,12 +1,12 @@
 //
 //  ThreadingTests.swift
-//  SwiftSerializationTests
+//  SwiftLocalTests
 //
 //  Created by Andre Pham on 27/3/2024.
 //
 
 import XCTest
-@testable import SwiftSerialization
+@testable import SwiftLocal
 
 final class ThreadingTests: XCTestCase {
 

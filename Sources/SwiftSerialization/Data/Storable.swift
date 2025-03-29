@@ -1,6 +1,6 @@
 //
 //  Storable.swift
-//  SwiftSerialization
+//  SwiftLocal
 //
 //  Created by Andre Pham on 6/11/2022.
 //

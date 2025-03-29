@@ -1,12 +1,12 @@
 //
 //  DataObjectTests.swift
-//  SwiftSerializationTests
+//  SwiftLocalTests
 //
 //  Created by Andre Pham on 23/2/2023.
 //
 
 import XCTest
-@testable import SwiftSerialization
+@testable import SwiftLocal
 
 final class DataObjectTests: XCTestCase {
     

@@ -1,6 +1,6 @@
 //
 //  SerializationDatabase.swift
-//  SwiftSerialization
+//  SwiftLocal
 //
 //  Created by Andre Pham on 5/1/2023.
 //
@@ -30,7 +30,7 @@ public class SerializationDatabase: DatabaseTarget {
     /// Otherwise database access from multiple concurrent threads can cause the error "illegal multi-threaded access to database connection"
     /// Tip: To ensure no deadlocks, make sure a task added to the queue doesn't start another task
     /// Tip: If accessing the database is required before starting another operation, both database accesses should be completed within a single sync block, otherwise they can become out of sync (this is accomplished using "internal" denoted methods that execute without being queued so they can be called within sync blocks)
-    private let databaseQueue = DispatchQueue(label: "swiftserialization.andrepham")
+    private let databaseQueue = DispatchQueue(label: "swiftlocal.andrepham")
     
     public init() {
         self.url = FileManager.default.urls(for: .libraryDirectory, in: .allDomainsMask)[0]

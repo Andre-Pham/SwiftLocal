@@ -1,6 +1,6 @@
 //
 //  DataObject.swift
-//  SwiftSerialization
+//  SwiftLocal
 //
 //  Created by Andre Pham on 6/11/2022.
 //
@@ -509,7 +509,7 @@ public class DataObject {
             var type = NSClassFromString("\(nameSpace).\(activeClassName)") as? Storable.Type
             if type == nil {
                 // If the type doesn't exist, we may be looking at the wrong namespace - check package namespace instead
-                type = NSClassFromString("SwiftSerialization.\(activeClassName)") as? Storable.Type
+                type = NSClassFromString("SwiftLocal.\(activeClassName)") as? Storable.Type
             }
             guard let type else {
                 assertionFailure("Class \(nameSpace).\(activeClassName) does not exist but is trying to be restored")

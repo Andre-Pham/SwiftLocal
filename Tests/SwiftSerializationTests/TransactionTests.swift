@@ -1,12 +1,12 @@
 //
 //  TransactionTests.swift
-//  SwiftSerialization
+//  SwiftLocal
 //
 //  Created by Andre Pham on 8/11/2023.
 //
 
 import XCTest
-@testable import SwiftSerialization
+@testable import SwiftLocal
 
 final class TransactionTests: XCTestCase {
 
