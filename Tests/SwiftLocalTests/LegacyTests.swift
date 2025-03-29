@@ -10,14 +10,14 @@ import XCTest
 
 final class LegacyTests: XCTestCase {
     
-    let databaseTargets: [DatabaseTarget] = [LocalDatabase()]
+    let localDatabase = LocalDatabase()
     
     override func setUp() async throws {
-        self.databaseTargets.forEach({ _ = $0.clearDatabase() })
+        self.localDatabase.clearDatabase()
     }
     
     override func tearDown() {
-        self.databaseTargets.forEach({ _ = $0.clearDatabase() })
+        self.localDatabase.clearDatabase()
     }
 
     func testFieldAndClassNameRefactor() throws {
@@ -25,18 +25,14 @@ final class LegacyTests: XCTestCase {
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
         
         let legacyHomework = LegacyHomework(legacyAnswers: "1 + 1 = 2", legacyGrade: 100)
-        for database in self.databaseTargets {
-            print("-- DATABASE \(database.self) --")
-            
-            XCTAssert(database.write(Record(data: legacyHomework)))
-            let allHomework: [Homework] = database.read()
-            if allHomework.count == 1 {
-                let homework = allHomework[0]
-                XCTAssertEqual(homework.answers, legacyHomework.legacyAnswers)
-                XCTAssertEqual(homework.grade, legacyHomework.legacyGrade)
-            } else {
-                XCTFail("Legacy class could not be restored")
-            }
+        XCTAssert(self.localDatabase.write(Record(data: legacyHomework)))
+        let allHomework: [Homework] = self.localDatabase.read()
+        if allHomework.count == 1 {
+            let homework = allHomework[0]
+            XCTAssertEqual(homework.answers, legacyHomework.legacyAnswers)
+            XCTAssertEqual(homework.grade, legacyHomework.legacyGrade)
+        } else {
+            XCTFail("Legacy class could not be restored")
         }
     }
     
@@ -45,13 +41,9 @@ final class LegacyTests: XCTestCase {
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
         
         let legacyHomework = LegacyHomework(legacyAnswers: "1 + 1 = 2", legacyGrade: 100)
-        for database in self.databaseTargets {
-            print("-- DATABASE \(database.self) --")
-            
-            XCTAssert(database.write(Record(id: "myHomework", data: legacyHomework)))
-            let homeworkCount = database.readIDs(Homework.self)
-            XCTAssertEqual(homeworkCount, ["myHomework"])
-        }
+        XCTAssert(self.localDatabase.write(Record(id: "myHomework", data: legacyHomework)))
+        let homeworkCount = self.localDatabase.readIDs(Homework.self)
+        XCTAssertEqual(homeworkCount, ["myHomework"])
     }
     
     func testLegacyCount() throws {
@@ -59,13 +51,9 @@ final class LegacyTests: XCTestCase {
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
         
         let legacyHomework = LegacyHomework(legacyAnswers: "1 + 1 = 2", legacyGrade: 100)
-        for database in self.databaseTargets {
-            print("-- DATABASE \(database.self) --")
-            
-            XCTAssert(database.write(Record(data: legacyHomework)))
-            let homeworkCount = database.count(Homework.self)
-            XCTAssertEqual(homeworkCount, 1)
-        }
+        XCTAssert(self.localDatabase.write(Record(data: legacyHomework)))
+        let homeworkCount = self.localDatabase.count(Homework.self)
+        XCTAssertEqual(homeworkCount, 1)
     }
     
     func testLegacyDelete() throws {
@@ -73,14 +61,10 @@ final class LegacyTests: XCTestCase {
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
         
         let legacyHomework = LegacyHomework(legacyAnswers: "1 + 1 = 2", legacyGrade: 100)
-        for database in self.databaseTargets {
-            print("-- DATABASE \(database.self) --")
-            
-            XCTAssert(database.count() == 0)
-            XCTAssert(database.write(Record(data: legacyHomework)))
-            XCTAssert(database.delete(Homework.self) == 1)
-            XCTAssert(database.count() == 0)
-        }
+        XCTAssert(self.localDatabase.count() == 0)
+        XCTAssert(self.localDatabase.write(Record(data: legacyHomework)))
+        XCTAssert(self.localDatabase.delete(Homework.self) == 1)
+        XCTAssert(self.localDatabase.count() == 0)
     }
 
 }

@@ -9,7 +9,7 @@ import Foundation
 import SQLite3
 
 /// A database target that uses the SQLite3 to save data.
-public class LocalDatabase: DatabaseTarget {
+public class LocalDatabase {
     
     /// The directory the sqlite file is saved to
     private let url: URL
