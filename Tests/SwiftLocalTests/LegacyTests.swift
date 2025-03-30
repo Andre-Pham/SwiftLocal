@@ -13,12 +13,10 @@ final class LegacyTests: XCTestCase {
     let localDatabase = try! LocalDatabase()
     
     override func setUp() async throws {
-        print("LegacyTests - setUp")
         try await self.localDatabase.clearDatabase()
     }
     
     override func tearDown() async throws {
-        print("LegacyTests - tearDown")
         try await self.localDatabase.clearDatabase()
     }
     

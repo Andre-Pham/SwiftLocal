@@ -38,7 +38,7 @@ public class LocalDatabase {
     public init() throws {
         self.url = FileManager.default
             .urls(for: .libraryDirectory, in: .allDomainsMask)[0]
-            .appendingPathComponent("records.sqlite")
+            .appendingPathComponent("swiftlocal.sqlite")
         guard sqlite3_open(self.url.path, &self.database) == SQLITE_OK else {
             throw LocalDatabaseError.databaseOpenError("SQLite database could not be opened at path: \(self.url.path)")
         }
