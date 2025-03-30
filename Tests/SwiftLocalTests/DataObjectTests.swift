@@ -21,12 +21,14 @@ final class DataObjectTests: XCTestCase {
     )
     
     override func setUp() async throws {
+        print("DataObjectTests - setUp")
         try await self.localDatabase.clearDatabase()
         self.student.giveHomework(Homework(answers: "2x + 5", grade: nil))
         self.student.giveHomework(Homework(answers: "Something smart", grade: 99))
     }
     
     override func tearDown() async throws {
+        print("DataObjectTests - tearDown")
         try await self.localDatabase.clearDatabase()
     }
     

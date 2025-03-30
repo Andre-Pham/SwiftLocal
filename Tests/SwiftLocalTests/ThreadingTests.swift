@@ -39,10 +39,12 @@ final class ThreadingTests: XCTestCase {
     }
     
     override func setUp() async throws {
+        print("ThreadingTests - setUp")
         try await self.localDatabase.clearDatabase()
     }
     
     override func tearDown() async throws {
+        print("ThreadingTests - tearDown")
         try await self.localDatabase.clearDatabase()
     }
     

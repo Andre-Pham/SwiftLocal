@@ -22,10 +22,12 @@ final class TransactionTests: XCTestCase {
     }
     
     override func setUp() async throws {
+        print("TransactionTests - setUp")
         try await self.localDatabase.clearDatabase()
     }
     
     override func tearDown() async throws {
+        print("TransactionTests - tearDown")
         try await self.localDatabase.clearDatabase()
     }
     
