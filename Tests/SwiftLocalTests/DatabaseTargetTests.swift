@@ -31,15 +31,11 @@ final class DatabaseTargetTests: XCTestCase {
         try await self.localDatabase.clearDatabase()
     }
 
-    func testWrite() async {
-        do {
-            let record = Record(data: self.student1)
-            try await self.localDatabase.write(record)
-            let count = try await self.localDatabase.count()
-            XCTAssertEqual(count, 1)
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
+    func testWrite() async throws {
+        let record = Record(data: self.student1)
+        try await self.localDatabase.write(record)
+        let count = try await self.localDatabase.count()
+        XCTAssertEqual(count, 1)
     }
     
     func testReadByObjectType() async throws {
