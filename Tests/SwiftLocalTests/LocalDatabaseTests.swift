@@ -1,5 +1,5 @@
 //
-//  DatabaseTargetTests.swift
+//  LocalDatabaseTests.swift
 //  SwiftLocalTests
 //
 //  Created by Andre Pham on 23/2/2023.
@@ -8,7 +8,7 @@
 import XCTest
 @testable import SwiftLocal
 
-final class DatabaseTargetTests: XCTestCase {
+final class LocalDatabaseTests: XCTestCase {
 
     let localDatabase = try! LocalDatabase()
     var student1: Student {
