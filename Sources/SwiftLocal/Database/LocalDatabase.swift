@@ -28,14 +28,6 @@ public class LocalDatabase {
     private let url: URL
     /// The database instance
     private var database: OpaquePointer? = nil
-    /// The date formatter used for adding and retrieving dates
-    private var dateFormatter: DateFormatter {
-        let result = DateFormatter()
-        result.locale = Locale(identifier: "en_US_POSIX")
-        result.timeZone = TimeZone(secondsFromGMT: 0)
-        result.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ"
-        return result
-    }
     /// True if a transaction is ongoing
     public private(set) var transactionActive = false
     /// A dedicated serial queue to serialize all SQLite access - allows database to be accessed by multiple concurrent threads
@@ -44,6 +36,7 @@ public class LocalDatabase {
     /// Initialize a new LocalDatabase instance.
     /// - Throws: If the database could not be opened, or if the table could not be created
     public init() throws {
+        print("[ANDRE] ATTEMPTING TO INIT")
         self.url = FileManager.default
             .urls(for: .libraryDirectory, in: .allDomainsMask)[0]
             .appendingPathComponent("records.sqlite")
@@ -51,6 +44,7 @@ public class LocalDatabase {
             throw LocalDatabaseError.databaseOpenError("SQLite database could not be opened at path: \(self.url.path)")
         }
         try self.setupTable()
+        print("[ANDRE] INIT SUCCEEDED")
     }
     
     deinit {
