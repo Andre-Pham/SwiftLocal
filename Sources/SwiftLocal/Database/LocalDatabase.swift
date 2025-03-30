@@ -21,7 +21,7 @@ public enum LocalDatabaseError: Error {
     
 }
 
-/// A database target that uses the SQLite3 to save data.
+/// A local database uses the SQLite3 to save data.
 public class LocalDatabase {
     
     /// The directory the sqlite file is saved to
