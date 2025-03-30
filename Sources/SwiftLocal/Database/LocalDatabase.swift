@@ -36,7 +36,6 @@ public class LocalDatabase {
     /// Initialize a new LocalDatabase instance.
     /// - Throws: If the database could not be opened, or if the table could not be created
     public init() throws {
-        print("[ANDRE] ATTEMPTING TO INIT")
         self.url = FileManager.default
             .urls(for: .libraryDirectory, in: .allDomainsMask)[0]
             .appendingPathComponent("records.sqlite")
@@ -44,7 +43,6 @@ public class LocalDatabase {
             throw LocalDatabaseError.databaseOpenError("SQLite database could not be opened at path: \(self.url.path)")
         }
         try self.setupTable()
-        print("[ANDRE] INIT SUCCEEDED")
     }
     
     deinit {
@@ -132,12 +130,14 @@ public class LocalDatabase {
                 }
                 sqlite3_bind_text(statement, 1, (objectName as NSString).utf8String, -1, nil)
                 while sqlite3_step(statement) == SQLITE_ROW {
-                    guard let dataCStr = sqlite3_column_text(statement, 3) else {
-                        continue
+                    guard let dataCStr = sqlite3_column_text(statement, 2) else {
+                        sqlite3_finalize(statement)
+                        throw LocalDatabaseError.executionError("Failed to read data column for object: \(objectName)")
                     }
                     let dataString = String(cString: dataCStr)
                     guard let data = dataString.data(using: .utf8) else {
-                        continue
+                        sqlite3_finalize(statement)
+                        throw LocalDatabaseError.executionError("Failed to parse data column for object: \(objectName)")
                     }
                     let dataObject = DataObject(data: data)
                     result.append(dataObject.restore(T.self))
@@ -163,15 +163,17 @@ public class LocalDatabase {
             sqlite3_bind_text(statement, 1, (id as NSString).utf8String, -1, nil)
             var result: T? = nil
             if sqlite3_step(statement) == SQLITE_ROW {
-                guard let dataCStr = sqlite3_column_text(statement, 3) else {
+                guard let dataCStr = sqlite3_column_text(statement, 2) else {
                     sqlite3_finalize(statement)
-                    return nil
+                    throw LocalDatabaseError.executionError("Failed to read data column for id: \(id)")
                 }
                 let dataString = String(cString: dataCStr)
-                if let data = dataString.data(using: .utf8) {
-                    let dataObject = DataObject(data: data)
-                    result = dataObject.restore(T.self)
+                guard let data = dataString.data(using: .utf8) else {
+                    sqlite3_finalize(statement)
+                    throw LocalDatabaseError.executionError("Failed to parse data column for id: \(id)")
                 }
+                let dataObject = DataObject(data: data)
+                result = dataObject.restore(T.self)
             }
             sqlite3_finalize(statement)
             return result
