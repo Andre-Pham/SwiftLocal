@@ -208,7 +208,7 @@ final class ThreadingTests: XCTestCase {
                             print("> Rolling back second transaction on thread \(index + 1)")
                             try await self.localDatabase.rollbackTransaction()
                         } catch {
-                            if case let LocalDatabaseError.transactionError(message) = error, message == "No active transaction to rollback or rollback failed" {
+                            if case let LocalDatabaseError.transactionError(message) = error, message == "No active transaction to rollback" {
                                 print("> There was no transaction to rollback (another thread already did - continuing)")
                                 // There was no transaction to rollback
                                 // This is fine as we're just testing transaction database operations don't fail when executed from different threads

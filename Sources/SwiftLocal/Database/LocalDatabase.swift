@@ -212,7 +212,7 @@ public class LocalDatabase {
     @discardableResult
     public func delete<T: Storable>(_ allOf: T.Type) async throws -> Int {
         return try await self.perform {
-            let countBeforeDelete = self.countInternal()
+            let countBeforeDelete = try self.countInternal()
             let currentObjectName = String(describing: T.self)
             let legacyObjectNames = Legacy.oldClassNames[currentObjectName] ?? []
             let allObjectNames = legacyObjectNames + [currentObjectName]
@@ -230,7 +230,8 @@ public class LocalDatabase {
                     sqlite3_finalize(statement)
                 }
             }
-            return countBeforeDelete - self.countInternal()
+            let countAfterDelete = try self.countInternal()
+            return countBeforeDelete - countAfterDelete
         }
     }
     
@@ -262,7 +263,7 @@ public class LocalDatabase {
     @discardableResult
     public func clearDatabase() async throws -> Int {
         return try await self.perform {
-            let count = self.countInternal()
+            let count = try self.countInternal()
             var countDeleted = 0
             let statementString = "DELETE FROM record;"
             var statement: OpaquePointer? = nil
@@ -290,24 +291,24 @@ public class LocalDatabase {
     /// - Returns: The number of records
     public func count() async throws -> Int {
         return try await self.perform {
-            self.countInternal()
+            try self.countInternal()
         }
     }
     
     /// Count the number of records saved. Executed without queuing.
     /// WARNING: Does not operate using the database queue - only execute this within a database queue sync block.
     /// - Returns: The number of records
-    private func countInternal() -> Int {
-        var count = 0
+    private func countInternal() throws -> Int {
         let statementString = "SELECT COUNT(*) FROM record;"
         var statement: OpaquePointer? = nil
-        if sqlite3_prepare(self.database, statementString, -1, &statement, nil) == SQLITE_OK {
-            if sqlite3_step(statement) == SQLITE_ROW {
-                count = Int(sqlite3_column_int(statement, 0))
-            } else {
-                assertionFailure("Counting records statement could not be executed")
-            }
+        guard sqlite3_prepare(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
+            throw LocalDatabaseError.statementPreparationError("Failed to prepare count statement")
         }
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            sqlite3_finalize(statement)
+            throw LocalDatabaseError.executionError("Counting records statement could not be executed")
+        }
+        let count = Int(sqlite3_column_int(statement, 0))
         sqlite3_finalize(statement)
         return count
     }
@@ -353,9 +354,7 @@ public class LocalDatabase {
                 if !override {
                     throw LocalDatabaseError.transactionError("Transaction already active and override is false")
                 }
-                if !self.rollbackTransactionInternal() {
-                    throw LocalDatabaseError.transactionError("Failed to rollback active transaction")
-                }
+                try self.rollbackTransactionInternal()
             }
             let beginTransactionString = "BEGIN TRANSACTION;"
             var statement: OpaquePointer? = nil
@@ -395,28 +394,27 @@ public class LocalDatabase {
     /// - Returns: True if there was an active transaction and it was rolled back
     public func rollbackTransaction() async throws {
         try await self.perform {
-            if !self.rollbackTransactionInternal() {
-                throw LocalDatabaseError.transactionError("No active transaction to rollback or rollback failed")
-            }
+            try self.rollbackTransactionInternal()
         }
     }
     
     /// Rollback the current transaction. All changes made during the transaction are undone. Executed without queuing.
     /// WARNING: Does not operate using the database queue - only execute this within a database queue sync block.
-    /// - Returns: True if there was an active transaction and it was rolled back
-    private func rollbackTransactionInternal() -> Bool {
+    private func rollbackTransactionInternal() throws {
         guard self.transactionActive else {
-            return false
+            throw LocalDatabaseError.transactionError("No active transaction to rollback")
         }
         let rollbackTransactionString = "ROLLBACK;"
         var statement: OpaquePointer? = nil
-        var successful = false
-        if sqlite3_prepare_v2(self.database, rollbackTransactionString, -1, &statement, nil) == SQLITE_OK {
-            successful = sqlite3_step(statement) == SQLITE_DONE
-            sqlite3_finalize(statement)
+        guard sqlite3_prepare_v2(self.database, rollbackTransactionString, -1, &statement, nil) == SQLITE_OK else {
+            throw LocalDatabaseError.statementPreparationError("Failed to prepare rollbackTransaction statement")
         }
-        self.transactionActive = successful ? false : self.transactionActive
-        return successful
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            sqlite3_finalize(statement)
+            throw LocalDatabaseError.executionError("Failed to rollback transaction")
+        }
+        sqlite3_finalize(statement)
+        self.transactionActive = false
     }
     
 }
