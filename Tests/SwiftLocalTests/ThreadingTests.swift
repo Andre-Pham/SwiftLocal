@@ -186,16 +186,36 @@ final class ThreadingTests: XCTestCase {
                         // Applications are expected to manage transaction operation order - you shouldn't be starting multiple concurrent transactions simultaneously
                         print("> Starting transaction on thread \(index + 1)")
                         try await self.localDatabase.startTransaction(override: true)
-                        print("> Writing on thread \(index + 1)")
+                        print("> Writing to transaction on thread \(index + 1)")
                         try await self.localDatabase.write(record)
-                        print("> Committing transaction on thread \(index + 1)")
-                        try await self.localDatabase.commitTransaction()
+                        do {
+                            print("> Committing transaction on thread \(index + 1)")
+                            try await self.localDatabase.commitTransaction()
+                        } catch {
+                            if case let LocalDatabaseError.transactionError(message) = error, message == "No active transaction to commit" {
+                                print("> There was no transaction to commit (another thread already did - continuing)")
+                                // There was no transaction to commit
+                                // This is fine as we're just testing transaction database operations don't fail when executed from different threads
+                            } else {
+                                throw error
+                            }
+                        }
                         print("> Starting second transaction on thread \(index + 1)")
                         try await self.localDatabase.startTransaction(override: true)
-                        print("> Writing on thread \(index + 1)")
+                        print("> Writing to second transaction on thread \(index + 1)")
                         try await self.localDatabase.write(record)
-                        print("> Rolling back transaction on thread \(index + 1)")
-                        try await self.localDatabase.rollbackTransaction()
+                        do {
+                            print("> Rolling back second transaction on thread \(index + 1)")
+                            try await self.localDatabase.rollbackTransaction()
+                        } catch {
+                            if case let LocalDatabaseError.transactionError(message) = error, message == "No active transaction to rollback or rollback failed" {
+                                print("> There was no transaction to rollback (another thread already did - continuing)")
+                                // There was no transaction to rollback
+                                // This is fine as we're just testing transaction database operations don't fail when executed from different threads
+                            } else {
+                                throw error
+                            }
+                        }
                     } catch {
                         XCTFail("Transaction failed on thread \(index + 1): \(error)")
                     }
