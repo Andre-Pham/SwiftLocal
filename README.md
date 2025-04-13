@@ -14,7 +14,7 @@ let database = try LocalDatabase()
 let person = Person(name: "Andre", height: 188.0)
 ```
 
-Writing to the database. Returns `true` on success and `false` on failure.
+Writing to the database.
 
 ```swift
 // Writes our person object to the database
@@ -52,8 +52,7 @@ let peopleCount = try await database.count(Person.self)
 We can delete records, or even clear the database.
 
 ```swift
-// Delete a record with specific record ID
-// (Returns true if a record was deleted)
+// Delete any record with a specific record ID
 try await database.delete(id: "myID")
 
 // Delete all Person records
