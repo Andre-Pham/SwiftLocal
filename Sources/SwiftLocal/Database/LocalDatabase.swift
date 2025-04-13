@@ -210,7 +210,7 @@ public class LocalDatabase {
         }
     }
     
-    /// Delete all instances of an object
+    /// Delete all instances of an object.
     /// - Parameters:
     ///   - allOf: The type to delete
     /// - Returns: The number of records deleted

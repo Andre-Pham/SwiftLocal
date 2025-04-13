@@ -408,7 +408,7 @@ func readIDs<T: Storable>(_ allOf: T.Type) async throws -> [String]
 ```
 
 ```swift
-/// Delete all instances of an object
+/// Delete all instances of an object.
 /// - Parameters:
 ///   - allOf: The type to delete
 /// - Returns: The number of records deleted
