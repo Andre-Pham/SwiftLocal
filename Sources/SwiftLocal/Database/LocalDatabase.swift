@@ -9,7 +9,6 @@ import Foundation
 import SQLite3
 
 public enum LocalDatabaseError: Error {
-    
     /// An error relating to opening the database
     case databaseOpenError(String)
     /// An error relating to preparing an SQLite3 statement
@@ -18,21 +17,24 @@ public enum LocalDatabaseError: Error {
     case executionError(String)
     /// An error relating to a transaction
     case transactionError(String)
-    
 }
 
 /// A local database uses the SQLite3 to save data.
 public class LocalDatabase {
-    
+    // MARK: Properties
+
+    /// True if a transaction is ongoing
+    public private(set) var transactionActive = false
+
     /// The directory the sqlite file is saved to
     private let url: URL
     /// The database instance
     private var database: OpaquePointer? = nil
-    /// True if a transaction is ongoing
-    public private(set) var transactionActive = false
     /// A dedicated serial queue to serialize all SQLite access - allows database to be accessed by multiple concurrent threads
     private let databaseQueue = DispatchQueue(label: "swiftlocal.andrepham")
-    
+
+    // MARK: Lifecycle
+
     /// Initialize a new LocalDatabase instance.
     /// - Throws: If the database could not be opened, or if the table could not be created
     public init() throws {
@@ -44,49 +46,15 @@ public class LocalDatabase {
         }
         try self.setupTable()
     }
-    
+
     deinit {
         if self.database != nil {
             sqlite3_close(self.database)
         }
     }
-    
-    /// Setup the database table if it does not exist.
-    /// - Throws: If the table could not be created
-    private func setupTable() throws {
-        let statementString = """
-        CREATE TABLE IF NOT EXISTS record(
-            id TEXT PRIMARY KEY,
-            objectName TEXT,
-            data TEXT
-        );
-        """
-        var statement: OpaquePointer? = nil
-        guard sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
-            throw LocalDatabaseError.statementPreparationError("Failed to prepare table creation statement")
-        }
-        guard sqlite3_step(statement) == SQLITE_DONE else {
-            sqlite3_finalize(statement)
-            throw LocalDatabaseError.executionError("Failed to create table")
-        }
-        sqlite3_finalize(statement)
-    }
-    
-    /// A centralized helper that runs work on the dedicated database queue.
-    /// - Throws: If the block operation fails
-    private func perform<T>(_ block: @escaping () throws -> T) async throws -> T {
-        return try await withCheckedThrowingContinuation { continuation in
-            self.databaseQueue.async {
-                do {
-                    let result = try block()
-                    continuation.resume(returning: result)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
-    }
-    
+
+    // MARK: Functions
+
     /// Write a record to the database. If the id already exists, replace it.
     /// - Parameters:
     ///   - record: The record to be written
@@ -100,7 +68,13 @@ public class LocalDatabase {
             }
             sqlite3_bind_text(statement, 1, (record.metadata.id as NSString).utf8String, -1, nil)
             sqlite3_bind_text(statement, 2, (record.metadata.objectName as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(statement, 3, (String(decoding: record.data.toDataObject().rawData, as: UTF8.self) as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(
+                statement,
+                3,
+                (String(decoding: record.data.toDataObject().rawData, as: UTF8.self) as NSString).utf8String,
+                -1,
+                nil
+            )
             let successful = sqlite3_step(statement) == SQLITE_DONE
             if self.transactionActive {
                 sqlite3_reset(statement)
@@ -112,7 +86,7 @@ public class LocalDatabase {
             }
         }
     }
-    
+
     /// Retrieve all storable objects of a specified type.
     /// - Returns: All saved objects of the specified type
     /// - Throws: If the read operation fails
@@ -147,7 +121,7 @@ public class LocalDatabase {
             return result
         }
     }
-    
+
     /// Retrieve the storable object with the matching id.
     /// - Parameters:
     ///   - id: The id of the stored record
@@ -179,7 +153,7 @@ public class LocalDatabase {
             return result
         }
     }
-    
+
     /// Retrieve all the record IDs of all objects of a specific type.
     /// - Parameters:
     ///   - allOf: The type to retrieve the ids from
@@ -209,7 +183,7 @@ public class LocalDatabase {
             return result
         }
     }
-    
+
     /// Delete all instances of an object.
     /// - Parameters:
     ///   - allOf: The type to delete
@@ -240,7 +214,7 @@ public class LocalDatabase {
             return countBeforeDelete - countAfterDelete
         }
     }
-    
+
     /// Delete the record with the matching id.
     /// - Parameters:
     ///   - id: The id of the stored record to delete
@@ -264,7 +238,7 @@ public class LocalDatabase {
             }
         }
     }
-    
+
     /// Clear the entire database.
     /// - Returns: The number of records deleted
     /// - Throws: If the delete operation fails
@@ -294,7 +268,7 @@ public class LocalDatabase {
             return countDeleted
         }
     }
-    
+
     /// Count the number of records saved.
     /// - Returns: The number of records
     /// - Throws: If the count operation fails
@@ -303,26 +277,7 @@ public class LocalDatabase {
             try self.countInternal()
         }
     }
-    
-    /// Count the number of records saved. Executed without queuing.
-    /// WARNING: Does not operate using the database queue - only execute this within a database queue sync block.
-    /// - Returns: The number of records
-    /// - Throws: If the count operation fails
-    private func countInternal() throws -> Int {
-        let statementString = "SELECT COUNT(*) FROM record;"
-        var statement: OpaquePointer? = nil
-        guard sqlite3_prepare(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
-            throw LocalDatabaseError.statementPreparationError("Failed to prepare count statement")
-        }
-        guard sqlite3_step(statement) == SQLITE_ROW else {
-            sqlite3_finalize(statement)
-            throw LocalDatabaseError.executionError("Counting records statement could not be executed")
-        }
-        let count = Int(sqlite3_column_int(statement, 0))
-        sqlite3_finalize(statement)
-        return count
-    }
-    
+
     /// Count the number of records of a certain type saved.
     /// - Parameters:
     ///   - allOf: The type to count
@@ -352,7 +307,7 @@ public class LocalDatabase {
             return count
         }
     }
-    
+
     /// Begin a database transaction.
     /// Changes are still made immediately, however to finalise the transaction, `commitTransaction` should be executed.
     /// All changes made during the transaction are cancelled if `rollbackTransaction` is executed.
@@ -381,7 +336,7 @@ public class LocalDatabase {
             self.transactionActive = true
         }
     }
-    
+
     /// Commit the current transaction. All changes made during the transaction are finalised.
     /// - Throws: If no transaction is active, or if the commit operation fails
     public func commitTransaction() async throws {
@@ -402,7 +357,7 @@ public class LocalDatabase {
             self.transactionActive = false
         }
     }
-    
+
     /// Rollback the current transaction. All changes made during the transaction are undone.
     /// - Returns: True if there was an active transaction and it was rolled back
     /// - Throws: If no transaction is active, or if the rollback operation fails
@@ -411,7 +366,62 @@ public class LocalDatabase {
             try self.rollbackTransactionInternal()
         }
     }
-    
+
+    /// Setup the database table if it does not exist.
+    /// - Throws: If the table could not be created
+    private func setupTable() throws {
+        let statementString = """
+        CREATE TABLE IF NOT EXISTS record(
+            id TEXT PRIMARY KEY,
+            objectName TEXT,
+            data TEXT
+        );
+        """
+        var statement: OpaquePointer? = nil
+        guard sqlite3_prepare_v2(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
+            throw LocalDatabaseError.statementPreparationError("Failed to prepare table creation statement")
+        }
+        guard sqlite3_step(statement) == SQLITE_DONE else {
+            sqlite3_finalize(statement)
+            throw LocalDatabaseError.executionError("Failed to create table")
+        }
+        sqlite3_finalize(statement)
+    }
+
+    /// A centralized helper that runs work on the dedicated database queue.
+    /// - Throws: If the block operation fails
+    private func perform<T>(_ block: @escaping () throws -> T) async throws -> T {
+        return try await withCheckedThrowingContinuation { continuation in
+            self.databaseQueue.async {
+                do {
+                    let result = try block()
+                    continuation.resume(returning: result)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Count the number of records saved. Executed without queuing.
+    /// WARNING: Does not operate using the database queue - only execute this within a database queue sync block.
+    /// - Returns: The number of records
+    /// - Throws: If the count operation fails
+    private func countInternal() throws -> Int {
+        let statementString = "SELECT COUNT(*) FROM record;"
+        var statement: OpaquePointer? = nil
+        guard sqlite3_prepare(self.database, statementString, -1, &statement, nil) == SQLITE_OK else {
+            throw LocalDatabaseError.statementPreparationError("Failed to prepare count statement")
+        }
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            sqlite3_finalize(statement)
+            throw LocalDatabaseError.executionError("Counting records statement could not be executed")
+        }
+        let count = Int(sqlite3_column_int(statement, 0))
+        sqlite3_finalize(statement)
+        return count
+    }
+
     /// Rollback the current transaction. All changes made during the transaction are undone. Executed without queuing.
     /// WARNING: Does not operate using the database queue - only execute this within a database queue sync block.
     /// - Throws: If no transaction is active, or if the rollback operation fails
@@ -431,5 +441,4 @@ public class LocalDatabase {
         sqlite3_finalize(statement)
         self.transactionActive = false
     }
-    
 }

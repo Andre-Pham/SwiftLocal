@@ -9,17 +9,25 @@ import XCTest
 @testable import SwiftLocal
 
 final class ThreadingTests: XCTestCase {
+    // MARK: Static Properties
 
     static let THREAD_COUNT = 5
     static let TIMEOUT = 120
+
+    // MARK: Properties
+
     let localDatabase = try! LocalDatabase()
+
+    // MARK: Computed Properties
+
     var smallStudent: Student {
         let student = Student(firstName: "Big", lastName: "Boy", debt: 0.0, teacher: self.teacher, subjectNames: ["Math"])
-        for _ in 0..<8000 {
+        for _ in 0..<8_000 {
             student.giveHomework(Homework(answers: String(Int.random(in: 0..<10_000)), grade: Int.random(in: 0..<10_000)))
         }
         return student
     }
+
     var mediumStudent: Student {
         let student = Student(firstName: "Big", lastName: "Boy", debt: 0.0, teacher: self.teacher, subjectNames: ["Math"])
         for _ in 0..<40_000 {
@@ -27,6 +35,7 @@ final class ThreadingTests: XCTestCase {
         }
         return student
     }
+
     var largeStudent: Student {
         let student = Student(firstName: "Big", lastName: "Boy", debt: 0.0, teacher: self.teacher, subjectNames: ["Math"])
         for _ in 0..<150_000 {
@@ -34,18 +43,23 @@ final class ThreadingTests: XCTestCase {
         }
         return student
     }
+
     var teacher: Teacher {
         Teacher(firstName: "Karen", lastName: "Kob", salary: 50_000.0)
     }
-    
+
+    // MARK: Overridden Functions
+
     override func setUp() async throws {
         try await self.localDatabase.clearDatabase()
     }
-    
+
     override func tearDown() async throws {
         try await self.localDatabase.clearDatabase()
     }
-    
+
+    // MARK: Functions
+
     func testMultipleWriteThreads() async throws {
         print("============================== WRITE THREADS ======================")
         let expectedCount = Self.THREAD_COUNT
@@ -53,7 +67,9 @@ final class ThreadingTests: XCTestCase {
         await withTaskGroup(of: Void.self) { group in
             for index in 0..<expectedCount {
                 group.addTask { [weak self] in
-                    guard let self = self else { return }
+                    guard let self = self else {
+                        return
+                    }
                     let record = Record(data: self.largeStudent)
                     do {
                         print("> Writing on thread \(index + 1)")
@@ -71,14 +87,16 @@ final class ThreadingTests: XCTestCase {
         XCTAssertEqual(count, expectedCount)
         print("============================== END WRITE THREADS ==================")
     }
-    
-    func testMultipleReadThreads() async throws {
+
+    func testMultipleReadThreads() async {
         print("============================== READ THREADS =======================")
         let expectedCount = Self.THREAD_COUNT
         await withTaskGroup(of: Void.self) { group in
             for index in 0..<expectedCount {
                 group.addTask { [weak self] in
-                    guard let self = self else { return }
+                    guard let self = self else {
+                        return
+                    }
                     print("> Writing on thread \(index + 1)")
                     let record = Record(data: self.smallStudent)
                     do {
@@ -102,15 +120,17 @@ final class ThreadingTests: XCTestCase {
         }
         print("============================== END READ THREADS ===================")
     }
-    
-    func testMultipleDeleteThreads() async throws {
+
+    func testMultipleDeleteThreads() async {
         print("============================== DELETE THREADS =====================")
         let expectedCount = Self.THREAD_COUNT
         // Test case 1: Write and then delete each record by its id
         await withTaskGroup(of: Void.self) { group in
             for index in 0..<expectedCount {
                 group.addTask { [weak self] in
-                    guard let self = self else { return }
+                    guard let self = self else {
+                        return
+                    }
                     let record = Record(data: self.largeStudent)
                     do {
                         print("> Writing on thread \(index + 1)")
@@ -128,7 +148,9 @@ final class ThreadingTests: XCTestCase {
         await withTaskGroup(of: Void.self) { group in
             for index in 0..<expectedCount {
                 group.addTask { [weak self] in
-                    guard let self = self else { return }
+                    guard let self = self else {
+                        return
+                    }
                     do {
                         print("> Deleting many on thread \(index + 1)")
                         _ = try await self.localDatabase.delete(Student.self)
@@ -143,14 +165,16 @@ final class ThreadingTests: XCTestCase {
         }
         print("============================== END DELETE THREADS =================")
     }
-    
-    func testMultipleCountThreads() async throws {
+
+    func testMultipleCountThreads() async {
         print("============================== COUNT THREADS ======================")
         let expectedCount = Self.THREAD_COUNT
         await withTaskGroup(of: Void.self) { group in
             for index in 0..<expectedCount {
                 group.addTask { [weak self] in
-                    guard let self = self else { return }
+                    guard let self = self else {
+                        return
+                    }
                     let record = Record(data: self.largeStudent)
                     do {
                         print("> Writing on thread \(index + 1)")
@@ -170,20 +194,23 @@ final class ThreadingTests: XCTestCase {
         }
         print("============================== END COUNT THREADS ==================")
     }
-    
-    func testMultipleTransactionThreads() async throws {
+
+    func testMultipleTransactionThreads() async {
         print("============================== TRANSACTION THREADS ================")
         let expectedCount = Self.THREAD_COUNT
         await withTaskGroup(of: Void.self) { group in
             for index in 0..<expectedCount {
                 group.addTask { [weak self] in
-                    guard let self = self else { return }
+                    guard let self = self else {
+                        return
+                    }
                     let record = Record(data: self.largeStudent)
                     do {
                         // Depending on threads, there isn't always a transaction to override (and hence rollback) / commit / rollback
                         // We execute these operations to ensure thread access is safe and valid (otherwise an error is thrown)
                         // As to the actual order - this wouldn't be proper code in an application
-                        // Applications are expected to manage transaction operation order - you shouldn't be starting multiple concurrent transactions simultaneously
+                        // Applications are expected to manage transaction operation order - you shouldn't be starting multiple concurrent
+                        // transactions simultaneously
                         print("> Starting transaction on thread \(index + 1)")
                         try await self.localDatabase.startTransaction(override: true)
                         print("> Writing to transaction on thread \(index + 1)")
@@ -192,10 +219,11 @@ final class ThreadingTests: XCTestCase {
                             print("> Committing transaction on thread \(index + 1)")
                             try await self.localDatabase.commitTransaction()
                         } catch {
-                            if case let LocalDatabaseError.transactionError(message) = error, message == "No active transaction to commit" {
+                            if case LocalDatabaseError.transactionError(let message) = error, message == "No active transaction to commit" {
                                 print("> There was no transaction to commit (another thread already did - continuing)")
                                 // There was no transaction to commit
-                                // This is fine as we're just testing transaction database operations don't fail when executed from different threads
+                                // This is fine as we're just testing transaction database operations don't fail when executed from
+                                // different threads
                             } else {
                                 throw error
                             }
@@ -208,10 +236,12 @@ final class ThreadingTests: XCTestCase {
                             print("> Rolling back second transaction on thread \(index + 1)")
                             try await self.localDatabase.rollbackTransaction()
                         } catch {
-                            if case let LocalDatabaseError.transactionError(message) = error, message == "No active transaction to rollback" {
+                            if case LocalDatabaseError.transactionError(let message) = error,
+                               message == "No active transaction to rollback" {
                                 print("> There was no transaction to rollback (another thread already did - continuing)")
                                 // There was no transaction to rollback
-                                // This is fine as we're just testing transaction database operations don't fail when executed from different threads
+                                // This is fine as we're just testing transaction database operations don't fail when executed from
+                                // different threads
                             } else {
                                 throw error
                             }
@@ -225,5 +255,4 @@ final class ThreadingTests: XCTestCase {
         }
         print("============================== END TRANSACTION THREADS =================")
     }
-
 }
