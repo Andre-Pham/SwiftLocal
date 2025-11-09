@@ -11,9 +11,9 @@ import Foundation
 /// during database reads. This should be executed somewhere in the application startup.
 public enum Legacy {
     /// A dictionary of class names that may be stored and have been since refactored to a new name
-    private(set) static var newClassNames = [String: String]() // old: new
+    internal private(set) static var newClassNames = [String: String]() // old: new
     /// A dictionary of class names and their legacy counterparts
-    private(set) static var oldClassNames = [String: [String]]() // new: old
+    internal private(set) static var oldClassNames = [String: [String]]() // new: old
 
     /// Add a class name refactoring to consider when restoring objects that were written before the refactor.
     /// - Parameters:

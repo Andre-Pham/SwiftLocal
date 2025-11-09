@@ -8,12 +8,12 @@
 import XCTest
 @testable import SwiftLocal
 
-final class DataObjectTests: XCTestCase {
+internal final class DataObjectTests: XCTestCase {
     // MARK: Properties
 
-    let localDatabase = try! LocalDatabase()
+    internal let localDatabase = try! LocalDatabase()
 
-    let student = Student(
+    internal let student = Student(
         firstName: "Billy",
         lastName: "Bob",
         debt: 100_000.0,
@@ -23,19 +23,19 @@ final class DataObjectTests: XCTestCase {
 
     // MARK: Overridden Functions
 
-    override func setUp() async throws {
+    internal override func setUp() async throws {
         try await self.localDatabase.clearDatabase()
         self.student.giveHomework(Homework(answers: "2x + 5", grade: nil))
         self.student.giveHomework(Homework(answers: "Something smart", grade: 99))
     }
 
-    override func tearDown() async throws {
+    internal override func tearDown() async throws {
         try await self.localDatabase.clearDatabase()
     }
 
     // MARK: Functions
 
-    func testSerialization() async throws {
+    internal func testSerialization() async throws {
         try await self.localDatabase.write(Record(id: "student", data: self.student))
         let readStudent: Student? = try await self.localDatabase.read(id: "student")
         XCTAssertNotNil(readStudent)
@@ -55,7 +55,7 @@ final class DataObjectTests: XCTestCase {
         XCTAssertEqual(self.student.subjectNames, readStudent?.subjectNames)
     }
 
-    func testRawSerialization() throws {
+    internal func testRawSerialization() throws {
         // 1. Convert to raw string
         let studentDataObject = self.student.toDataObject()
         let studentSerialized = studentDataObject.toRawString()

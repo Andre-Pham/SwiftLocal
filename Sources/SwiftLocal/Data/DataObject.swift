@@ -14,7 +14,7 @@ public class DataObject {
     // MARK: Properties
 
     /// The name of the object (class) this instance represents (the value to objectField)
-    private(set) var objectName = String()
+    internal private(set) var objectName = String()
 
     /// The JSON key that corresponds to the object name of the data object
     private let objectField = "object"

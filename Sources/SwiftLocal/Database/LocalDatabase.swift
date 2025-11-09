@@ -68,13 +68,12 @@ public class LocalDatabase {
             }
             sqlite3_bind_text(statement, 1, (record.metadata.id as NSString).utf8String, -1, nil)
             sqlite3_bind_text(statement, 2, (record.metadata.objectName as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(
-                statement,
-                3,
-                (String(decoding: record.data.toDataObject().rawData, as: UTF8.self) as NSString).utf8String,
-                -1,
-                nil
-            )
+            let recordData = record.data.toDataObject().rawData
+            guard let dataString = String(data: recordData, encoding: .utf8) else {
+                sqlite3_finalize(statement)
+                throw LocalDatabaseError.executionError("Failed to encode data for object: \(record.metadata.objectName)")
+            }
+            sqlite3_bind_text(statement, 3, (dataString as NSString).utf8String, -1, nil)
             let successful = sqlite3_step(statement) == SQLITE_DONE
             if self.transactionActive {
                 sqlite3_reset(statement)

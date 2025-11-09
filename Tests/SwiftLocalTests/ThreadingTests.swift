@@ -8,19 +8,19 @@
 import XCTest
 @testable import SwiftLocal
 
-final class ThreadingTests: XCTestCase {
+internal final class ThreadingTests: XCTestCase {
     // MARK: Static Properties
 
-    static let THREAD_COUNT = 5
-    static let TIMEOUT = 120
+    internal static let THREAD_COUNT = 5
+    internal static let TIMEOUT = 120
 
     // MARK: Properties
 
-    let localDatabase = try! LocalDatabase()
+    internal let localDatabase = try! LocalDatabase()
 
     // MARK: Computed Properties
 
-    var smallStudent: Student {
+    internal var smallStudent: Student {
         let student = Student(firstName: "Big", lastName: "Boy", debt: 0.0, teacher: self.teacher, subjectNames: ["Math"])
         for _ in 0..<8_000 {
             student.giveHomework(Homework(answers: String(Int.random(in: 0..<10_000)), grade: Int.random(in: 0..<10_000)))
@@ -28,7 +28,7 @@ final class ThreadingTests: XCTestCase {
         return student
     }
 
-    var mediumStudent: Student {
+    internal var mediumStudent: Student {
         let student = Student(firstName: "Big", lastName: "Boy", debt: 0.0, teacher: self.teacher, subjectNames: ["Math"])
         for _ in 0..<40_000 {
             student.giveHomework(Homework(answers: String(Int.random(in: 0..<10_000)), grade: Int.random(in: 0..<10_000)))
@@ -36,7 +36,7 @@ final class ThreadingTests: XCTestCase {
         return student
     }
 
-    var largeStudent: Student {
+    internal var largeStudent: Student {
         let student = Student(firstName: "Big", lastName: "Boy", debt: 0.0, teacher: self.teacher, subjectNames: ["Math"])
         for _ in 0..<150_000 {
             student.giveHomework(Homework(answers: String(Int.random(in: 0..<10_000)), grade: Int.random(in: 0..<10_000)))
@@ -44,23 +44,23 @@ final class ThreadingTests: XCTestCase {
         return student
     }
 
-    var teacher: Teacher {
+    internal var teacher: Teacher {
         Teacher(firstName: "Karen", lastName: "Kob", salary: 50_000.0)
     }
 
     // MARK: Overridden Functions
 
-    override func setUp() async throws {
+    internal override func setUp() async throws {
         try await self.localDatabase.clearDatabase()
     }
 
-    override func tearDown() async throws {
+    internal override func tearDown() async throws {
         try await self.localDatabase.clearDatabase()
     }
 
     // MARK: Functions
 
-    func testMultipleWriteThreads() async throws {
+    internal func testMultipleWriteThreads() async throws {
         print("============================== WRITE THREADS ======================")
         let expectedCount = Self.THREAD_COUNT
         // Use a task group to perform concurrent writes
@@ -88,7 +88,7 @@ final class ThreadingTests: XCTestCase {
         print("============================== END WRITE THREADS ==================")
     }
 
-    func testMultipleReadThreads() async {
+    internal func testMultipleReadThreads() async {
         print("============================== READ THREADS =======================")
         let expectedCount = Self.THREAD_COUNT
         await withTaskGroup(of: Void.self) { group in
@@ -121,7 +121,7 @@ final class ThreadingTests: XCTestCase {
         print("============================== END READ THREADS ===================")
     }
 
-    func testMultipleDeleteThreads() async {
+    internal func testMultipleDeleteThreads() async {
         print("============================== DELETE THREADS =====================")
         let expectedCount = Self.THREAD_COUNT
         // Test case 1: Write and then delete each record by its id
@@ -166,7 +166,7 @@ final class ThreadingTests: XCTestCase {
         print("============================== END DELETE THREADS =================")
     }
 
-    func testMultipleCountThreads() async {
+    internal func testMultipleCountThreads() async {
         print("============================== COUNT THREADS ======================")
         let expectedCount = Self.THREAD_COUNT
         await withTaskGroup(of: Void.self) { group in
@@ -195,7 +195,7 @@ final class ThreadingTests: XCTestCase {
         print("============================== END COUNT THREADS ==================")
     }
 
-    func testMultipleTransactionThreads() async {
+    internal func testMultipleTransactionThreads() async {
         print("============================== TRANSACTION THREADS ================")
         let expectedCount = Self.THREAD_COUNT
         await withTaskGroup(of: Void.self) { group in

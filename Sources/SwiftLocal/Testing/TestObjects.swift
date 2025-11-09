@@ -17,26 +17,26 @@ internal class Person: Storable {
 
     // MARK: Properties
 
-    public let id = UUID()
+    internal let id = UUID()
 
-    private(set) var firstName: String
-    private(set) var lastName: String
+    internal private(set) var firstName: String
+    internal private(set) var lastName: String
 
     // MARK: Lifecycle
 
-    init(firstName: String, lastName: String) {
+    internal init(firstName: String, lastName: String) {
         self.firstName = firstName
         self.lastName = lastName
     }
 
-    required init(dataObject: DataObject) {
+    internal required init(dataObject: DataObject) {
         self.firstName = dataObject.get(Field.firstName.rawValue)
         self.lastName = dataObject.get(Field.lastName.rawValue)
     }
 
     // MARK: Functions
 
-    func toDataObject() -> DataObject {
+    internal func toDataObject() -> DataObject {
         return DataObject(self)
             .add(key: Field.firstName.rawValue, value: self.firstName)
             .add(key: Field.lastName.rawValue, value: self.lastName)
@@ -55,21 +55,21 @@ internal class Student: Person {
 
     // MARK: Properties
 
-    private(set) var homework = [Homework]()
-    private(set) var debt: Double
-    private(set) var teacher: Teacher
-    private(set) var subjectNames: [String]
+    internal private(set) var homework = [Homework]()
+    internal private(set) var debt: Double
+    internal private(set) var teacher: Teacher
+    internal private(set) var subjectNames: [String]
 
     // MARK: Lifecycle
 
-    init(firstName: String, lastName: String, debt: Double, teacher: Teacher, subjectNames: [String]) {
+    internal init(firstName: String, lastName: String, debt: Double, teacher: Teacher, subjectNames: [String]) {
         self.debt = debt
         self.teacher = teacher
         self.subjectNames = subjectNames
         super.init(firstName: firstName, lastName: lastName)
     }
 
-    required init(dataObject: DataObject) {
+    internal required init(dataObject: DataObject) {
         self.debt = dataObject.get(Field.debt.rawValue)
         self.homework = dataObject.getObjectArray(Field.homework.rawValue, type: Homework.self)
         self.teacher = dataObject.getObject(Field.teacher.rawValue, type: Teacher.self)
@@ -79,7 +79,7 @@ internal class Student: Person {
 
     // MARK: Overridden Functions
 
-    override func toDataObject() -> DataObject {
+    internal override func toDataObject() -> DataObject {
         return super.toDataObject()
             .add(key: Field.debt.rawValue, value: self.debt)
             .add(key: Field.homework.rawValue, value: self.homework)
@@ -89,7 +89,7 @@ internal class Student: Person {
 
     // MARK: Functions
 
-    func giveHomework(_ homework: Homework) {
+    internal func giveHomework(_ homework: Homework) {
         self.homework.append(homework)
     }
 }
@@ -103,23 +103,23 @@ internal class Teacher: Person {
 
     // MARK: Properties
 
-    private(set) var salary: Double
+    internal private(set) var salary: Double
 
     // MARK: Lifecycle
 
-    init(firstName: String, lastName: String, salary: Double) {
+    internal init(firstName: String, lastName: String, salary: Double) {
         self.salary = salary
         super.init(firstName: firstName, lastName: lastName)
     }
 
-    required init(dataObject: DataObject) {
+    internal required init(dataObject: DataObject) {
         self.salary = dataObject.get(Field.salary.rawValue)
         super.init(dataObject: dataObject)
     }
 
     // MARK: Overridden Functions
 
-    override func toDataObject() -> DataObject {
+    internal override func toDataObject() -> DataObject {
         return super.toDataObject()
             .add(key: Field.salary.rawValue, value: self.salary)
     }
@@ -135,25 +135,25 @@ internal class Homework: Storable {
 
     // MARK: Properties
 
-    public let answers: String
+    internal let answers: String
 
-    private(set) var grade: Int?
+    internal private(set) var grade: Int?
 
     // MARK: Lifecycle
 
-    init(answers: String, grade: Int?) {
+    internal init(answers: String, grade: Int?) {
         self.answers = answers
         self.grade = grade
     }
 
-    required init(dataObject: DataObject) {
+    internal required init(dataObject: DataObject) {
         self.answers = dataObject.get(Field.answers.rawValue, legacyKeys: ["legacyAnswers"])
         self.grade = dataObject.get(Field.grade.rawValue, legacyKeys: ["legacyGrade"])
     }
 
     // MARK: Functions
 
-    func toDataObject() -> DataObject {
+    internal func toDataObject() -> DataObject {
         return DataObject(self)
             .add(key: Field.answers.rawValue, value: self.answers)
             .add(key: Field.grade.rawValue, value: self.grade)
@@ -173,25 +173,25 @@ internal class LegacyHomework: Storable {
 
     // MARK: Properties
 
-    public let legacyAnswers: String
+    internal let legacyAnswers: String
 
-    private(set) var legacyGrade: Int?
+    internal private(set) var legacyGrade: Int?
 
     // MARK: Lifecycle
 
-    init(legacyAnswers: String, legacyGrade: Int?) {
+    internal init(legacyAnswers: String, legacyGrade: Int?) {
         self.legacyAnswers = legacyAnswers
         self.legacyGrade = legacyGrade
     }
 
-    required init(dataObject: DataObject) {
+    internal required init(dataObject: DataObject) {
         self.legacyAnswers = dataObject.get(Field.legacyAnswers.rawValue)
         self.legacyGrade = dataObject.get(Field.legacyGrade.rawValue)
     }
 
     // MARK: Functions
 
-    func toDataObject() -> DataObject {
+    internal func toDataObject() -> DataObject {
         return DataObject(self)
             .add(key: Field.legacyAnswers.rawValue, value: self.legacyAnswers)
             .add(key: Field.legacyGrade.rawValue, value: self.legacyGrade)

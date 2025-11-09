@@ -8,24 +8,24 @@
 import XCTest
 @testable import SwiftLocal
 
-final class LegacyTests: XCTestCase {
+internal final class LegacyTests: XCTestCase {
     // MARK: Properties
 
-    let localDatabase = try! LocalDatabase()
+    internal let localDatabase = try! LocalDatabase()
 
     // MARK: Overridden Functions
 
-    override func setUp() async throws {
+    internal override func setUp() async throws {
         try await self.localDatabase.clearDatabase()
     }
 
-    override func tearDown() async throws {
+    internal override func tearDown() async throws {
         try await self.localDatabase.clearDatabase()
     }
 
     // MARK: Functions
 
-    func testFieldAndClassNameRefactor() async throws {
+    internal func testFieldAndClassNameRefactor() async throws {
         // First remember to declare the refactor
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
 
@@ -41,7 +41,7 @@ final class LegacyTests: XCTestCase {
         }
     }
 
-    func testLegacyReadIDs() async throws {
+    internal func testLegacyReadIDs() async throws {
         // First remember to declare the refactor
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
 
@@ -51,7 +51,7 @@ final class LegacyTests: XCTestCase {
         XCTAssertEqual(homeworkIDs, ["myHomework"])
     }
 
-    func testLegacyCount() async throws {
+    internal func testLegacyCount() async throws {
         // First remember to declare the refactor
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
 
@@ -61,7 +61,7 @@ final class LegacyTests: XCTestCase {
         XCTAssertEqual(homeworkCount, 1)
     }
 
-    func testLegacyDelete() async throws {
+    internal func testLegacyDelete() async throws {
         // First remember to declare the refactor
         Legacy.addClassRefactor(old: "LegacyHomework", new: "Homework")
 
