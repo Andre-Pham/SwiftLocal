@@ -26,7 +26,7 @@ jobs:
     - name: Generate Compiler Log
       run: |
         set -o pipefail
-        swift build --build-tests 2>&1 | tee swift-build.log
+        swift build --build-tests -v > swift-build.log 2>&1
     - name: SwiftLint
       run: swiftlint --strict --config .swiftlint.yml
     - name: SwiftLint Analyze
