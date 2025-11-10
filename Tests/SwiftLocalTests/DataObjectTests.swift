@@ -8,33 +8,38 @@
 import XCTest
 @testable import SwiftLocal
 
-final class DataObjectTests: XCTestCase {
-    
-    let localDatabase = try! LocalDatabase()
+internal final class DataObjectTests: XCTestCase {
+    // MARK: Properties
 
-    let student = Student(
+    internal let localDatabase = try! LocalDatabase()
+
+    internal let student = Student(
         firstName: "Billy",
         lastName: "Bob",
         debt: 100_000.0,
         teacher: Teacher(firstName: "Karen", lastName: "Kob", salary: 50_000.0),
         subjectNames: ["Physics", "English"]
     )
-    
-    override func setUp() async throws {
+
+    // MARK: Overridden Functions
+
+    internal override func setUp() async throws {
         try await self.localDatabase.clearDatabase()
         self.student.giveHomework(Homework(answers: "2x + 5", grade: nil))
         self.student.giveHomework(Homework(answers: "Something smart", grade: 99))
     }
-    
-    override func tearDown() async throws {
+
+    internal override func tearDown() async throws {
         try await self.localDatabase.clearDatabase()
     }
-    
-    func testSerialization() async throws {
+
+    // MARK: Functions
+
+    internal func testSerialization() async throws {
         try await self.localDatabase.write(Record(id: "student", data: self.student))
         let readStudent: Student? = try await self.localDatabase.read(id: "student")
         XCTAssertNotNil(readStudent)
-        
+
         // Make sure all data is correctly saved and restored
         XCTAssertEqual(self.student.firstName, readStudent?.firstName)
         XCTAssertEqual(self.student.lastName, readStudent?.lastName)
@@ -49,14 +54,14 @@ final class DataObjectTests: XCTestCase {
         XCTAssertEqual(self.student.homework.last?.grade, readStudent?.homework.last?.grade)
         XCTAssertEqual(self.student.subjectNames, readStudent?.subjectNames)
     }
-    
-    func testRawSerialization() throws {
+
+    internal func testRawSerialization() throws {
         // 1. Convert to raw string
         let studentDataObject = self.student.toDataObject()
         let studentSerialized = studentDataObject.toRawString()
         // 2. Convert raw string back into student
-        let readStudent = DataObject(rawString: studentSerialized!).restore(Student.self)
-        
+        let readStudent = try DataObject(rawString: XCTUnwrap(studentSerialized)).restore(Student.self)
+
         // Make sure all data is correctly saved and restored
         XCTAssertEqual(self.student.firstName, readStudent.firstName)
         XCTAssertEqual(self.student.lastName, readStudent.lastName)
@@ -71,5 +76,4 @@ final class DataObjectTests: XCTestCase {
         XCTAssertEqual(self.student.homework.last?.grade, readStudent.homework.last?.grade)
         XCTAssertEqual(self.student.subjectNames, readStudent.subjectNames)
     }
-
 }

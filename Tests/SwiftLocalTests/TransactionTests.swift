@@ -8,28 +8,38 @@
 import XCTest
 @testable import SwiftLocal
 
-final class TransactionTests: XCTestCase {
+internal final class TransactionTests: XCTestCase {
+    // MARK: Properties
 
-    let localDatabase = try! LocalDatabase()
-    var student1: Student {
+    internal let localDatabase = try! LocalDatabase()
+
+    // MARK: Computed Properties
+
+    internal var student1: Student {
         Student(firstName: "Billy", lastName: "Bob", debt: 100_000.0, teacher: self.teacher, subjectNames: ["Physics", "English"])
     }
-    var student2: Student {
+
+    internal var student2: Student {
         Student(firstName: "Sammy", lastName: "Sob", debt: 0.0, teacher: self.teacher, subjectNames: ["Math"])
     }
-    var teacher: Teacher {
+
+    internal var teacher: Teacher {
         Teacher(firstName: "Karen", lastName: "Kob", salary: 50_000.0)
     }
-    
-    override func setUp() async throws {
+
+    // MARK: Overridden Functions
+
+    internal override func setUp() async throws {
         try await self.localDatabase.clearDatabase()
     }
-    
-    override func tearDown() async throws {
+
+    internal override func tearDown() async throws {
         try await self.localDatabase.clearDatabase()
     }
-    
-    func testCommitTransaction() async throws {
+
+    // MARK: Functions
+
+    internal func testCommitTransaction() async throws {
         let record = Record(data: self.student1)
         var count = try await self.localDatabase.count()
         XCTAssertEqual(count, 0)
@@ -55,8 +65,8 @@ final class TransactionTests: XCTestCase {
         count = try await self.localDatabase.count()
         XCTAssertEqual(count, 1)
     }
-    
-    func testRollbackTransaction() async throws {
+
+    internal func testRollbackTransaction() async throws {
         let record = Record(data: self.student1)
         var count = try await self.localDatabase.count()
         XCTAssertEqual(count, 0)
@@ -71,8 +81,8 @@ final class TransactionTests: XCTestCase {
         count = try await self.localDatabase.count()
         XCTAssertEqual(count, 0)
     }
-    
-    func testCommitThenRollback() async throws {
+
+    internal func testCommitThenRollback() async throws {
         let record0 = Record(data: self.teacher)
         let record1 = Record(data: self.student1)
         let record2 = Record(data: self.student2)
@@ -96,8 +106,8 @@ final class TransactionTests: XCTestCase {
         count = try await self.localDatabase.count()
         XCTAssertEqual(count, 2)
     }
-    
-    func testTransactionOverride() async throws {
+
+    internal func testTransactionOverride() async throws {
         let record = Record(data: self.student1)
         try await self.localDatabase.startTransaction(override: true)
         try await self.localDatabase.write(record)
@@ -112,8 +122,8 @@ final class TransactionTests: XCTestCase {
         count = try await self.localDatabase.count()
         XCTAssertEqual(count, 0)
     }
-    
-    func testTransactionNoOverride() async throws {
+
+    internal func testTransactionNoOverride() async throws {
         let record = Record(data: self.student1)
         try await self.localDatabase.startTransaction(override: true)
         try await self.localDatabase.write(record)
@@ -135,8 +145,8 @@ final class TransactionTests: XCTestCase {
         count = try await self.localDatabase.count()
         XCTAssertEqual(count, 0)
     }
-    
-    func testTransactionManyCommit() async throws {
+
+    internal func testTransactionManyCommit() async throws {
         let record = Record(data: self.student1)
         try await self.localDatabase.startTransaction(override: true)
         try await self.localDatabase.write(record)
@@ -154,8 +164,8 @@ final class TransactionTests: XCTestCase {
         count = try await self.localDatabase.count()
         XCTAssertEqual(count, 1)
     }
-    
-    func testTransactionManyRollback() async throws {
+
+    internal func testTransactionManyRollback() async throws {
         let record = Record(data: self.student1)
         try await self.localDatabase.startTransaction(override: true)
         try await self.localDatabase.write(record)
@@ -175,5 +185,4 @@ final class TransactionTests: XCTestCase {
         count = try await self.localDatabase.count()
         XCTAssertEqual(count, 0)
     }
-
 }
