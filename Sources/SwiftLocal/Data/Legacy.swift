@@ -5,8 +5,6 @@
 //  Created by Andre Pham on 23/2/2023.
 //
 
-import Foundation
-
 /// Your application should always populate Legacy with the history of class name refactors. This way legacy class names can be accessed
 /// during database reads. This should be executed somewhere in the application startup.
 public enum Legacy {

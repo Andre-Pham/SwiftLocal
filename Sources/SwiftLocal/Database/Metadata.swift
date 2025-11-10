@@ -5,8 +5,6 @@
 //  Created by Andre Pham on 3/1/2023.
 //
 
-import Foundation
-
 internal class Metadata: Storable {
     // MARK: Nested Types
 

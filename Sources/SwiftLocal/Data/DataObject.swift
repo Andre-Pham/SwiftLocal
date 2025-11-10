@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import SwiftUI
 import SwiftyJSON
 
 /// Refer to README.md for usage examples.
